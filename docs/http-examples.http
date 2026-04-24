@@ -1,0 +1,100 @@
+@api=http://localhost:4000
+@internal=replace_with_internal_secret
+
+### Health
+GET {{api}}/health
+
+### Telegram auth
+POST {{api}}/auth/telegram
+Content-Type: application/json
+
+{
+  "initData": "query_id=...&user=...&auth_date=...&hash=...",
+  "deviceFingerprint": "local-browser"
+}
+
+### Profile
+GET {{api}}/me
+Cookie: vc_session=replace_with_cookie
+
+### Save nickname and rules
+PATCH {{api}}/me/profile
+Content-Type: application/json
+Cookie: vc_session=replace_with_cookie
+
+{
+  "nickname": "burmalda_player",
+  "rulesAccepted": true,
+  "deviceFingerprint": "local-browser"
+}
+
+### Lobby
+GET {{api}}/lobby
+Cookie: vc_session=replace_with_cookie
+
+### Missions
+GET {{api}}/me/missions
+Cookie: vc_session=replace_with_cookie
+
+### Claim daily login
+POST {{api}}/me/claim-daily-login
+Cookie: vc_session=replace_with_cookie
+
+### Claim rescue
+POST {{api}}/me/claim-rescue
+Cookie: vc_session=replace_with_cookie
+
+### Claim mission reward
+POST {{api}}/me/claim-mission
+Content-Type: application/json
+Cookie: vc_session=replace_with_cookie
+
+{
+  "missionId": "play_five_rounds"
+}
+
+### Activity feed
+GET {{api}}/activity/feed
+Cookie: vc_session=replace_with_cookie
+
+### Current round
+GET {{api}}/rounds/current
+Cookie: vc_session=replace_with_cookie
+
+### Buy chart boost
+POST {{api}}/rounds/replace_round_uuid/boosts/chart
+Cookie: vc_session=replace_with_cookie
+
+### Buy hint boost
+POST {{api}}/rounds/replace_round_uuid/boosts/hint
+Cookie: vc_session=replace_with_cookie
+
+### Place bet
+POST {{api}}/bets
+Content-Type: application/json
+Cookie: vc_session=replace_with_cookie
+
+{
+  "roundId": "replace_round_uuid",
+  "assetId": "replace_asset_uuid"
+}
+
+### History
+GET {{api}}/bets/history?limit=10
+Cookie: vc_session=replace_with_cookie
+
+### Daily leaderboard
+GET {{api}}/leaderboard/daily
+Cookie: vc_session=replace_with_cookie
+
+### Referral overview
+GET {{api}}/referral
+Cookie: vc_session=replace_with_cookie
+
+### Verify finished round
+GET {{api}}/rounds/replace_round_uuid/verify
+Cookie: vc_session=replace_with_cookie
+
+### Internal round scheduler tick
+POST {{api}}/internal/rounds/tick
+x-internal-secret: {{internal}}

@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  active
+  suspicious
+  soft_banned
+  hard_banned
+}
+
+enum RoundStatus {
+  upcoming
+  active
+  finished
+  cancelled
+}
+
+enum BetStatus {
+  pending
+  won
+  lost
+  cancelled
+}
+
+enum ForecastHorizon {
+  short
+  long
+}
+
+enum TransactionType {
+  signup_bonus
+  bet_place
+  bet_win
+  daily_login_bonus
+  rescue_refill
+  mission_reward
+  boost_purchase
+  referral_reward
+  manual_adjustment
+}
+
+enum BoostType {
+  chart
+  hint
+}
+
+model User {
+  id                 String             @id @default(uuid())
+  telegramUserId     String             @unique @map("telegram_user_id")
+  username           String?
+  firstName          String?            @map("first_name")
+  languageCode       String?            @map("language_code")
+  photoUrl           String?            @map("photo_url")
+  nickname           String?
+  referralStartParam String?            @map("referral_start_param")
+  rulesAcceptedAt    DateTime?          @map("rules_accepted_at")
+  balance            Int                @default(0)
+  status             UserStatus         @default(active)
+  riskFlags          Json               @default("{}") @map("risk_flags")
+  lastRefillAt       DateTime           @default(now()) @map("last_refill_at")
+  referredByUserId   String?            @map("referred_by_user_id")
+  currentStreak      Int                @default(0) @map("current_streak")
+  bestStreak         Int                @default(0) @map("best_streak")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  lastLoginAt        DateTime?          @map("last_login_at")
+  bets               Bet[]
+  sessions           Session[]
+  transactions       Transaction[]
+  leaderboardDaily   LeaderboardDaily[]
+  securityEvents     SecurityEvent[]
+  boosts             RoundBoost[]
+  referredBy         User?              @relation("UserReferrals", fields: [referredByUserId], references: [id])
+  referrals          User[]             @relation("UserReferrals")
+
+  @@index([status])
+  @@index([referredByUserId])
+  @@map("users")
+}
+
+model Session {
+  id                    String    @id @default(uuid())
+  userId                String    @map("user_id")
+  telegramInitQueryId   String?   @map("telegram_init_query_id")
+  tokenHash             String    @unique @map("token_hash")
+  userAgent             String?   @map("user_agent")
+  ip                    String?
+  deviceFingerprint     String?   @map("device_fingerprint")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  lastSeenAt            DateTime  @default(now()) @map("last_seen_at")
+  revokedAt             DateTime? @map("revoked_at")
+  user                  User      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([deviceFingerprint])
+  @@map("sessions")
+}
+
+model Round {
+  id             String      @id @default(uuid())
+  status         RoundStatus @default(upcoming)
+  roundType      String      @default("classic") @map("round_type")
+  startAt        DateTime    @map("start_at")
+  endAt          DateTime    @map("end_at")
+  seedHash       String      @map("seed_hash")
+  seedSecret     String      @map("seed_secret")
+  revealedSeed   String?     @map("revealed_seed")
+  winningAssetId String?     @map("winning_asset_id")
+  configJson     Json        @map("config_json")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  settledAt      DateTime?   @map("settled_at")
+  assets         Asset[]
+  bets           Bet[]
+  boosts         RoundBoost[]
+
+  @@index([status, startAt, endAt])
+  @@map("rounds")
+}
+
+model Asset {
+  id             String   @id @default(uuid())
+  roundId        String   @map("round_id")
+  name           String
+  metaJson       Json     @default("{}") @map("meta_json")
+  volatilityType String   @map("volatility_type")
+  chartDataJson  Json     @map("chart_data_json")
+  finalReturn    Decimal  @db.Decimal(12, 6) @map("final_return")
+  createdAt      DateTime @default(now()) @map("created_at")
+  round          Round    @relation(fields: [roundId], references: [id])
+  bets           Bet[]
+
+  @@index([roundId])
+  @@map("assets")
+}
+
+model Bet {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  roundId   String    @map("round_id")
+  assetId   String    @map("asset_id")
+  betType   String    @default("asset") @map("bet_type")
+  eventId   String?   @map("event_id")
+  eventOutcome String? @map("event_outcome")
+  horizon   ForecastHorizon @default(short)
+  amount    Int
+  status    BetStatus @default(pending)
+  payout    Int       @default(0)
+  placedAt  DateTime  @default(now()) @map("placed_at")
+  settledAt DateTime? @map("settled_at")
+  user      User      @relation(fields: [userId], references: [id])
+  round     Round     @relation(fields: [roundId], references: [id])
+  asset     Asset     @relation(fields: [assetId], references: [id])
+
+  @@unique([userId, roundId])
+  @@index([roundId])
+  @@index([roundId, eventId])
+  @@map("bets")
+}
+
+model Transaction {
+  id             String          @id @default(uuid())
+  userId         String          @map("user_id")
+  type           TransactionType
+  amount         Int
+  balanceBefore  Int             @map("balance_before")
+  balanceAfter   Int             @map("balance_after")
+  referenceType  String?         @map("reference_type")
+  referenceId    String?         @map("reference_id")
+  idempotencyKey String?         @unique @map("idempotency_key")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  user           User            @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@map("transactions")
+}
+
+model RoundBoost {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  roundId    String    @map("round_id")
+  type       BoostType
+  price      Int
+  payloadJson Json     @default("{}") @map("payload_json")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  user       User      @relation(fields: [userId], references: [id])
+  round      Round     @relation(fields: [roundId], references: [id])
+
+  @@unique([userId, roundId, type])
+  @@index([roundId, userId])
+  @@map("round_boosts")
+}
+
+model LeaderboardDaily {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  date         DateTime @db.Date
+  betsCount    Int      @default(0) @map("bets_count")
+  winsCount    Int      @default(0) @map("wins_count")
+  totalWagered Int      @default(0) @map("total_wagered")
+  totalPayout  Int      @default(0) @map("total_payout")
+  netProfit    Int      @default(0) @map("net_profit")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  user         User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, date])
+  @@index([date, netProfit])
+  @@map("leaderboard_daily")
+}
+
+model SecurityEvent {
+  id          String   @id @default(uuid())
+  userId      String?  @map("user_id")
+  type        String
+  ip          String?
+  userAgent   String?  @map("user_agent")
+  payloadJson Json     @default("{}") @map("payload_json")
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+  @@map("security_events")
+}

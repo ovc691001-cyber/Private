@@ -1,0 +1,29 @@
+{
+  "name": "volatility-club",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Telegram Mini App MVP for fictional volatility prediction.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm --filter @volatility/shared build && pnpm --filter @volatility/backend --filter @volatility/frontend --parallel dev",
+    "build": "pnpm -r build",
+    "test": "pnpm --filter @volatility/shared build && pnpm -r test",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write .",
+    "db:generate": "pnpm --filter @volatility/backend db:generate",
+    "db:migrate": "pnpm --filter @volatility/backend db:migrate",
+    "db:seed": "pnpm --filter @volatility/backend db:seed",
+    "prod:up": "docker compose --env-file .env.production -f infra/docker-compose.prod.yml up -d --build",
+    "prod:logs": "docker compose --env-file .env.production -f infra/docker-compose.prod.yml logs -f",
+    "prod:ps": "docker compose --env-file .env.production -f infra/docker-compose.prod.yml ps",
+    "prod:down": "docker compose --env-file .env.production -f infra/docker-compose.prod.yml down"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3"
+  },
+  "packageManager": "pnpm@9.12.3"
+}

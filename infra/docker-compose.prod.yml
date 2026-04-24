@@ -1,0 +1,101 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ..
+      dockerfile: apps/backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      REDIS_URL: redis://redis:6379
+      BACKEND_PORT: 4000
+      FRONTEND_URL: https://${APP_DOMAIN}
+      CORS_ORIGIN: https://${APP_DOMAIN}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME}
+      SESSION_SECRET: ${SESSION_SECRET}
+      INTERNAL_SECRET: ${INTERNAL_SECRET}
+      COOKIE_SECURE: "true"
+      ENABLE_DEV_AUTH: "false"
+      ROUND_DURATION_SECONDS: ${ROUND_DURATION_SECONDS}
+      ROUND_BET_AMOUNT: ${ROUND_BET_AMOUNT}
+      ROUND_PAYOUT_MULTIPLIER: ${ROUND_PAYOUT_MULTIPLIER}
+      STARTING_BALANCE: ${STARTING_BALANCE}
+      DAILY_LOGIN_BONUS_AMOUNT: ${DAILY_LOGIN_BONUS_AMOUNT}
+      RESCUE_REFILL_AMOUNT: ${RESCUE_REFILL_AMOUNT}
+      RESCUE_REFILL_THRESHOLD: ${RESCUE_REFILL_THRESHOLD}
+      RESCUE_REFILL_COOLDOWN_HOURS: ${RESCUE_REFILL_COOLDOWN_HOURS}
+      MISSION_REWARD_AMOUNT: ${MISSION_REWARD_AMOUNT}
+      REFERRAL_SIGNUP_REWARD: ${REFERRAL_SIGNUP_REWARD}
+      REFERRAL_ACTIVE_REWARD: ${REFERRAL_ACTIVE_REWARD}
+      BOOST_CHART_PRICE: ${BOOST_CHART_PRICE}
+      BOOST_HINT_PRICE: ${BOOST_HINT_PRICE}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: apps/frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://${API_DOMAIN}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: https://${API_DOMAIN}
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      API_DOMAIN: ${API_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  postgres-data:
+  redis-data:
+  caddy-data:
+  caddy-config:
