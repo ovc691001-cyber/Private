@@ -402,8 +402,10 @@ function normalizePoints(points: ChartPoint[]) {
 
 function Sparkline({ points, tone, large = false }: { points: ChartPoint[]; tone: string; large?: boolean }) {
   const path = normalizePoints(points);
+  const area = [`0,56`, ...path, `100,56`].join(" ");
   return (
     <svg className={`sparkline ${large ? "large" : ""} tone-${tone}`} viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true">
+      <polygon className="sparkline-area" points={area} />
       <polyline className="sparkline-glow" points={path.join(" ")} />
       <polyline className="sparkline-line" points={path.join(" ")} />
     </svg>
@@ -492,7 +494,7 @@ function AssetPreviewCard({
 
   return (
     <button type="button" className={`asset-live-card tone-${tone} ${compact ? "compact" : ""}`} onClick={onClick}>
-      <AssetMiniScene asset={asset} interest={interest} />
+      {compact ? <span className="asset-local-glow" /> : <AssetMiniScene asset={asset} interest={interest} />}
       <div className="asset-live-card__copy">
         <span className="asset-mini-letter">{asset.name.slice(0, 1)}</span>
         <strong>{asset.name}</strong>
@@ -506,6 +508,13 @@ function AssetPreviewCard({
       <MarketInfluenceBadge interest={interest} players={asset.players} />
     </button>
   );
+}
+
+function eventTimerText(event: MapEvent) {
+  if (event.status !== "resolved") return event.timer;
+  if (event.outcome === "delay") return "Задержка";
+  if (event.outcome === "fail") return "Провал";
+  return "Готово";
 }
 
 function EventListItem({ event, onClick }: { event: MapEvent; onClick: () => void }) {
@@ -522,7 +531,7 @@ function EventListItem({ event, onClick }: { event: MapEvent; onClick: () => voi
         <span>{event.route} • {event.assetName}</span>
       </div>
       <div className="upliks-feed-side">
-        <strong>{event.timer}</strong>
+        <strong>{eventTimerText(event)}</strong>
         <span className={impact < 0 ? "bad" : "good"}>{event.status === "resolved" ? `${impact >= 0 ? "+" : ""}${impact.toFixed(1)}%` : "в пути"}</span>
       </div>
     </button>
@@ -923,10 +932,22 @@ function RoundPlayScreen({
 
       <div className="round-asset-picker">
         {assets.map((asset) => (
-          <button key={asset.id} type="button" className={selectedAsset?.id === asset.id ? "active" : ""} onClick={() => onSelectAsset(asset.id)}>
-            <AssetMiniScene asset={asset} interest={interestForAsset(asset)} />
-            <span>{asset.name}</span>
-            <strong className={asset.change5m < 0 ? "bad" : "good"}>{`${asset.change5m >= 0 ? "+" : ""}${asset.change5m.toFixed(1)}%`}</strong>
+          <button
+            key={asset.id}
+            type="button"
+            className={`round-asset-row tone-${toneForAsset(asset)} ${selectedAsset?.id === asset.id ? "active" : ""}`}
+            onClick={() => onSelectAsset(asset.id)}
+          >
+            <span className="asset-mini-letter inline">{asset.name.slice(0, 1)}</span>
+            <span className="round-asset-row__copy">
+              <strong>{asset.name}</strong>
+              <small>{asset.sector} · {formatMoney(asset.players)} игроков</small>
+            </span>
+            <Sparkline points={asset.chartData} tone={toneForAsset(asset)} />
+            <span className="round-asset-row__side">
+              <strong><Money value={asset.currentPrice} /></strong>
+              <em className={asset.change5m < 0 ? "bad" : "good"}>{`${asset.change5m >= 0 ? "+" : ""}${asset.change5m.toFixed(1)}%`}</em>
+            </span>
           </button>
         ))}
       </div>

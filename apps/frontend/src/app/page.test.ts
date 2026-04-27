@@ -28,7 +28,7 @@ describe("event map screen copy", () => {
     for (const term of forbidden) expect(source).not.toContain(term);
   });
 
-  it("uses model assets on the event map instead of only plain icons", () => {
+  it("keeps transport model assets available while rendering compact map markers", () => {
     for (const asset of [
       "model-passenger-plane.svg",
       "model-cargo-plane.svg",
@@ -39,5 +39,7 @@ describe("event map screen copy", () => {
     ]) {
       expect(eventMapSource).toContain(asset);
     }
+    expect(eventMapSource).toContain("data-model");
+    expect(eventMapSource).toContain("routeangle");
   });
 });

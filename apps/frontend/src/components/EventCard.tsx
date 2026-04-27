@@ -7,6 +7,13 @@ const transportIcon: Record<MapEvent["transport"], "plane" | "ship" | "truck"> =
   truck: "truck"
 };
 
+function timerLabel(event: MapEvent) {
+  if (event.status !== "resolved") return event.timer;
+  if (event.outcome === "delay") return "Задержка";
+  if (event.outcome === "fail") return "Провал";
+  return "Готово";
+}
+
 export function EventCard({ event, onClick }: { event: MapEvent; onClick?: () => void }) {
   const iconTone = event.accent === "green" ? "lime" : event.accent === "blue" ? "cyan" : event.accent;
   const Tag = onClick ? "button" : "article";
@@ -20,7 +27,7 @@ export function EventCard({ event, onClick }: { event: MapEvent; onClick?: () =>
         <strong>{event.title}</strong>
       </div>
       <span>{event.route}</span>
-      <time>{event.timer}</time>
+      <time className={event.status === "resolved" ? "is-resolved" : ""}>{timerLabel(event)}</time>
       <small>{event.assetName}</small>
     </Tag>
   );
