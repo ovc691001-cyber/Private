@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 112">
+  <defs>
+    <linearGradient id="body" x1="35" y1="86" x2="114" y2="26" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111827"/>
+      <stop offset=".42" stop-color="#f5f8ff"/>
+      <stop offset="1" stop-color="#1d2635"/>
+    </linearGradient>
+    <filter id="glow" x="-35%" y="-35%" width="170%" height="180%">
+      <feDropShadow dx="0" dy="9" stdDeviation="5" flood-color="#001222" flood-opacity=".5"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#8a4dff" flood-opacity=".42"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#22d8ff" flood-opacity=".36"/>
+    </filter>
+  </defs>
+  <g filter="url(#glow)">
+    <g fill="none" stroke="#29384a" stroke-width="8" stroke-linecap="round">
+      <path d="M53 48 25 30M96 48l29-18M53 68 25 86M96 68l29 18"/>
+    </g>
+    <g>
+      <circle cx="25" cy="30" r="21" fill="#111827"/>
+      <circle cx="125" cy="30" r="21" fill="#111827"/>
+      <circle cx="25" cy="86" r="21" fill="#111827"/>
+      <circle cx="125" cy="86" r="21" fill="#111827"/>
+      <path d="M9 30h32M25 14v32M109 30h32M125 14v32M9 86h32M25 70v32M109 86h32M125 70v32" stroke="#aeb9c7" stroke-width="4" stroke-linecap="round" opacity=".9"/>
+      <path d="M11 23c8-8 22-10 31 0M108 23c8-8 22-10 31 0M11 79c8-8 22-10 31 0M108 79c8-8 22-10 31 0" stroke="#28e3ff" stroke-width="4" stroke-linecap="round"/>
+      <path d="M19 42c8 6 18 6 26 0M116 42c8 6 18 6 26 0M19 98c8 6 18 6 26 0M116 98c8 6 18 6 26 0" stroke="#9d61ff" stroke-width="4" stroke-linecap="round"/>
+    </g>
+    <path d="M49 46c6-15 17-22 30-22 15 0 26 8 31 23l-5 25c-5 10-15 16-29 16-13 0-24-5-31-15l4-27Z" fill="url(#body)"/>
+    <path d="M58 43c5-7 12-10 21-10 10 0 18 4 23 11l-7 14H63l-5-15Z" fill="#101825"/>
+    <path d="M63 72h30l-7 9H70l-7-9Z" fill="#8a4dff"/>
+    <path d="M58 65h36" stroke="#22d8ff" stroke-width="4" stroke-linecap="round"/>
+    <path d="M52 77h47" stroke="#9dff38" stroke-width="3" stroke-linecap="round" opacity=".9"/>
+  </g>
+</svg>

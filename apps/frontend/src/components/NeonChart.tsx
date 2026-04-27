@@ -7,7 +7,7 @@ type Point = {
 
 type Props = {
   points: Point[];
-  tone?: "lime" | "purple" | "cyan" | "red";
+  tone?: "lime" | "purple" | "cyan" | "red" | "orange";
   className?: string;
   showArea?: boolean;
   compact?: boolean;
@@ -33,6 +33,11 @@ const TONES = {
     stroke: "#FF5D7A",
     glow: "rgba(255,93,122,0.4)",
     fill: "rgba(255,93,122,0.16)"
+  },
+  orange: {
+    stroke: "#FFAD4D",
+    glow: "rgba(255,173,77,0.42)",
+    fill: "rgba(255,173,77,0.16)"
   }
 } as const;
 

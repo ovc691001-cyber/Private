@@ -6,10 +6,13 @@ type Props = {
   selected?: boolean;
   disabled?: boolean;
   onSelect?: () => void;
-  emphasis?: "lime" | "purple" | "cyan" | "red";
+  emphasis?: "lime" | "purple" | "cyan" | "red" | "orange";
 };
 
 export function AssetCard({ asset, selected, disabled, onSelect, emphasis = "lime" }: Props) {
+  const volatilityScore = asset.volatilityScore ?? 3;
+  const volatilityLabel = asset.volatilityLabel ?? "Умеренная";
+
   return (
     <button type="button" className={`asset-card upliks-card ${selected ? "selected" : ""}`} disabled={disabled} onClick={onSelect}>
       <div className="asset-card-top">
@@ -27,10 +30,10 @@ export function AssetCard({ asset, selected, disabled, onSelect, emphasis = "lim
       </div>
 
       <div className="asset-meta">
-        <span>{asset.volatilityLabel}</span>
-        <div className="volatility-dots" aria-label={`Волатильность ${asset.volatilityScore} из 5`}>
+        <span>{volatilityLabel}</span>
+        <div className="volatility-dots" aria-label={`Волатильность ${volatilityScore} из 5`}>
           {Array.from({ length: 5 }).map((_, index) => (
-            <span key={`${asset.id}-${index}`} className={index < asset.volatilityScore ? `on tone-${emphasis}` : ""} />
+            <span key={`${asset.id}-${index}`} className={index < volatilityScore ? `on tone-${emphasis}` : ""} />
           ))}
         </div>
       </div>

@@ -1,74 +1,52 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BottomNav } from "@/components/BottomNav";
-import { CurrencyGlyph, InlineValue } from "@/components/Brand";
+import { EventMap } from "@/components/EventMap";
+import { Legend } from "@/components/Legend";
+import { TelegramHeader } from "@/components/TelegramHeader";
 import { AppIcon } from "@/components/Icon";
-import { api, ApiError, clearSessionToken, saveSessionToken } from "@/lib/api";
+import { api, ApiError, saveSessionToken } from "@/lib/api";
 import { getDeviceFingerprint, getTelegramInitData, setupTelegramTheme } from "@/lib/telegram";
 
 export type AppTab = "lobby" | "assets" | "map" | "events" | "profile";
-
-type View = AppTab | "eventDetail" | "assetDetail";
-type Accent = "green" | "blue" | "orange" | "red" | "purple";
-type TransportType = "plane" | "ship" | "truck" | "weather";
+type AppView = AppTab | "assetDetail" | "market" | "round" | "eventDetail";
+export type Accent = "green" | "blue" | "orange" | "red";
+export type TransportType = "plane" | "ship" | "truck";
 type EventOutcome = "success" | "delay" | "fail";
-
-export type User = {
-  id?: string;
-  username?: string | null;
-  balance: number;
-  nickname: string | null;
-  firstName: string | null;
-  photoUrl: string | null;
-  rulesAcceptedAt?: string | null;
-  currentStreak?: number;
-  bestStreak?: number;
-};
+type Direction = "up" | "down";
 
 type ChartPoint = {
   tick: number;
   value: number;
 };
 
-type WorldAsset = {
+export type User = {
+  balance: number;
+  nickname: string | null;
+  firstName: string | null;
+  photoUrl: string | null;
+  username?: string | null;
+};
+
+export type RoundAsset = {
   id: string;
   name: string;
   sector: string;
   description: string;
   iconToken: string;
-  volatilityType?: string;
-  volatilityLabel?: string;
-  volatilityScore?: number;
-  hint?: string | null;
   currentPrice: number;
   change5m: number;
   players: number;
   pool: number;
-  accent: Accent;
+  accent: Accent | "purple";
   chartData: ChartPoint[];
-};
-
-export type RoundAsset = WorldAsset & {
-  volatilityType: string;
-  volatilityLabel: string;
-  volatilityScore: number;
-  finalReturn: number | null;
+  volatilityType?: string;
+  volatilityLabel?: string;
+  volatilityScore?: number;
+  finalReturn?: number | null;
   returnsByHorizon?: { short: number; long: number } | null;
-};
-
-export type Round = {
-  id: string;
-  status: string;
-  startAt: string;
-  endAt: string;
-  seedHash: string;
-  revealedSeed: string | null;
-  winningAssetId?: string | null;
-  winners?: { short: string | null; long: string | null };
-  horizons?: Array<{ id: "short" | "long"; label: string; subtitle: string }>;
-  assets?: RoundAsset[];
+  hint?: string | null;
 };
 
 export type BetHistory = {
@@ -85,6 +63,22 @@ export type BetHistory = {
   revealedSeed: string | null;
   winningAssetId: string | null;
   verifyPath: string | null;
+};
+
+export type Round = {
+  id: string;
+  seedHash: string;
+  revealedSeed: string | null;
+  number: number;
+  status: string;
+  statusLabel: string;
+  startAt: string;
+  endAt: string;
+  remainingSeconds: number;
+  prizePool: number;
+  platformFeePercent: number;
+  participantCount: number;
+  participantAvatars: string[];
 };
 
 export type LeaderboardRow = {
@@ -126,6 +120,12 @@ export type ReferralOverview = {
   items: Array<{ id: string; name: string; roundsPlayed: number; milestoneReached: boolean }>;
 };
 
+export type ActivityItem = {
+  id: string;
+  kind: "system" | "market" | "leaderboard";
+  text: string;
+};
+
 export type EducationLessonPreview = {
   id: string;
   title: string;
@@ -134,704 +134,534 @@ export type EducationLessonPreview = {
 
 export type EducationLessonFull = EducationLessonPreview & {
   body: string[];
-  quiz?: { question: string; answer: string };
+  quiz?: {
+    question: string;
+    answer: string;
+  } | null;
 };
 
-type WorldEvent = {
-  id: string;
-  round_id: string;
-  type: string;
-  title: string;
-  description: string;
-  route_from: string;
-  route_to: string;
-  transport_type: TransportType;
-  related_asset_id: string;
-  related_asset_name: string;
-  duration_seconds: number;
-  remaining_seconds: number;
-  status: "active" | "resolved";
-  probability_success: number;
-  probability_delay: number;
-  probability_fail: number;
-  success_impact: number;
-  delay_impact: number;
-  fail_impact: number;
-  outcome: EventOutcome | null;
-  impact_applied: boolean;
-  created_at: string;
-  resolves_at: string;
-  tone: Accent;
-  map: {
-    from: { x: number; y: number };
-    to: { x: number; y: number };
-    card: { x: number; y: number };
-    vehicle: { x: number; y: number };
-  };
-};
-
-type EventFeedItem = {
-  id: string;
-  title: string;
-  description: string;
-  assetName: string | null;
-  impactPercent: number;
-  timeAgo: string;
-  tone: Accent;
-};
-
-export type ActivityItem = {
-  id: string;
-  kind: "system" | "market" | "leaderboard";
-  text: string;
-};
-
-type RoundSummary = {
-  id: string;
-  number: number;
-  status: string;
-  statusLabel: string;
-  startAt: string;
-  endAt: string;
-  seedHash: string;
-  revealedSeed: string | null;
-  remainingSeconds: number;
-  prizePool: number;
-  platformFeePercent: number;
-  participantCount: number;
-  participantAvatars: string[];
-};
-
-type CityLabel = {
-  name: string;
+export type MapPoint = {
   x: number;
   y: number;
 };
 
-type LobbyResponse = {
-  user: User;
-  round: RoundSummary;
-  assets: WorldAsset[];
-  events: WorldEvent[];
-  eventFeed: EventFeedItem[];
-  activity: ActivityItem[];
-  map?: {
-    cities: CityLabel[];
-    events: WorldEvent[];
+type BackendMapEvent = {
+  id: string;
+  title: string;
+  description: string;
+  route_from: string;
+  route_to: string;
+  related_asset_id: string;
+  related_asset_name: string;
+  transport_type: TransportType | "weather";
+  duration_seconds: number;
+  remaining_seconds: number;
+  status: "active" | "resolved";
+  resolves_at: string;
+  probability_success: number;
+  probability_delay: number;
+  probability_fail: number;
+  tone: Accent | "purple";
+  outcome: EventOutcome | null;
+  success_impact: number;
+  delay_impact: number;
+  fail_impact: number;
+  map: {
+    from: MapPoint;
+    to: MapPoint;
+    card: MapPoint;
+    vehicle: MapPoint;
   };
 };
 
-type StakeTarget = {
-  assetId: string;
-  eventId?: string;
-  outcome?: EventOutcome;
+export type MapEvent = {
+  id: string;
   title: string;
+  route: string;
+  routeFrom: string;
+  routeTo: string;
+  timer: string;
+  description: string;
+  transport: TransportType;
+  accent: Accent;
+  from: MapPoint;
+  to: MapPoint;
+  vehicle: MapPoint;
+  card: MapPoint;
+  status: "active" | "resolved";
+  remainingSeconds: number;
+  durationSeconds: number;
+  resolvesAt: string;
+  successProbability: number;
+  delayProbability: number;
+  failProbability: number;
+  assetId: string;
+  assetName: string;
+  successImpact: number;
+  delayImpact: number;
+  failImpact: number;
+  outcome: EventOutcome | null;
 };
 
-const filters = ["Все", "Технологии", "Транспорт", "Энергетика"] as const;
-const stakeAmounts = [100, 250, 500, 1000] as const;
+type FeedEvent = {
+  id: string;
+  title: string;
+  subtitle: string;
+  impact: string;
+  time: string;
+  accent: "lime" | "orange" | "red" | "cyan";
+  icon: "plane" | "ship" | "truck" | "activity";
+};
 
-export default function Home() {
-  const [data, setData] = useState<LobbyResponse | null>(null);
-  const [view, setView] = useState<View>("lobby");
-  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
-  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
-  const [activeFilter, setActiveFilter] = useState<(typeof filters)[number]>("Все");
-  const [stakeTarget, setStakeTarget] = useState<StakeTarget | null>(null);
-  const [selectedAmount, setSelectedAmount] = useState<(typeof stakeAmounts)[number]>(250);
-  const [soon, setSoon] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
-  const [mapZoom, setMapZoom] = useState(1);
+type LobbyResponse = {
+  user: User;
+  round: Round;
+  assets: RoundAsset[];
+  map: {
+    events: BackendMapEvent[];
+  };
+  eventFeed: Array<{
+    id: string;
+    title: string;
+    description: string;
+    assetName: string | null;
+    impactPercent: number;
+    timeAgo: string;
+    tone: "green" | "red" | "orange" | "blue" | "purple";
+  }>;
+  profile: ProfileDetails;
+  history: BetHistory[];
+  leaderboard: LeaderboardRow[];
+  missions: Mission[];
+  referral: ReferralOverview;
+};
 
-  useEffect(() => {
-    setupTelegramTheme();
-    void boot();
-  }, []);
+type LobbyState = {
+  user: User;
+  round: Round;
+  assets: RoundAsset[];
+  rawEvents: BackendMapEvent[];
+  feed: FeedEvent[];
+  profile: ProfileDetails;
+  history: BetHistory[];
+  leaderboard: LeaderboardRow[];
+  missions: Mission[];
+  referral: ReferralOverview;
+};
 
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
+type MarketAction = {
+  id: string;
+  assetId: string;
+  direction: Direction;
+  amount: number;
+};
 
-  useEffect(() => {
-    if (!data || data.round.id === "demo-round") return;
-    const polling = window.setInterval(() => {
-      void refreshLiveLayer();
-    }, 5000);
-    return () => window.clearInterval(polling);
-  }, [data?.round.id]);
+type AcceptedRoundBet = {
+  assetId: string;
+  assetName: string;
+  direction: Direction;
+  amount: number;
+  placedAt: number;
+};
 
-  useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(null), 3200);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
+const ROUND_AMOUNTS = [100, 250, 500, 1000] as const;
+const MARKET_AMOUNTS = [100, 500, 1000] as const;
 
-  const activeTab: AppTab = view === "assetDetail" ? "assets" : view === "eventDetail" ? "map" : view;
-  const assets = data?.assets ?? [];
-  const events = data?.events ?? [];
-  const cities = data?.map?.cities ?? demoCities;
-
-  const selectedAsset = useMemo(
-    () => assets.find((asset) => asset.id === selectedAssetId) ?? assets.find((asset) => asset.name === "AeroTexa") ?? assets[0] ?? null,
-    [assets, selectedAssetId]
-  );
-
-  const selectedEvent = useMemo(
-    () => events.find((event) => event.id === selectedEventId) ?? events[0] ?? null,
-    [events, selectedEventId]
-  );
-
-  const filteredAssets = activeFilter === "Все" ? assets : assets.filter((asset) => asset.sector === activeFilter);
-  const popularAssets = assets.slice(0, 3);
-  const upcomingEvent = events[0] ?? null;
-
-  async function boot() {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const initData = getTelegramInitData();
-      if (initData) {
-        const auth = await api<{ user: User; sessionToken: string }>("/auth/telegram", {
-          method: "POST",
-          body: { initData, deviceFingerprint: getDeviceFingerprint() }
-        });
-        saveSessionToken(auth.sessionToken);
-      }
-
-      const lobby = await api<LobbyResponse>("/lobby");
-      setData(normalizeLobby(lobby));
-      setSelectedAssetId(lobby.assets[2]?.id ?? lobby.assets[0]?.id ?? null);
-      setSelectedEventId(lobby.events[0]?.id ?? null);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) clearSessionToken();
-      if (process.env.NODE_ENV === "production") {
-        setError(err instanceof ApiError ? err.message : "Не удалось открыть Mini App.");
-      } else {
-        const demo = createDemoLobby();
-        setData(demo);
-        setSelectedAssetId(demo.assets[2]?.id ?? demo.assets[0]?.id ?? null);
-        setSelectedEventId(demo.events[0]?.id ?? null);
-        setNotice("Dev-режим запущен без Telegram-сессии.");
-      }
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function refreshLiveLayer() {
-    try {
-      const [activity, map] = await Promise.all([
-        api<{ items: ActivityItem[] }>("/activity/feed"),
-        api<{ cities: CityLabel[]; events: WorldEvent[] }>("/map/events")
-      ]);
-      setData((current) => (current ? { ...current, activity: activity.items, events: map.events, map } : current));
-    } catch {
-      // Polling should stay quiet in Telegram.
-    }
-  }
-
-  function openEvent(event: WorldEvent) {
-    setSelectedEventId(event.id);
-    setView("eventDetail");
-  }
-
-  function openAsset(asset: WorldAsset) {
-    setSelectedAssetId(asset.id);
-    setView("assetDetail");
-  }
-
-  function closeMiniApp() {
-    const tg = typeof window !== "undefined" ? window.Telegram?.WebApp : undefined;
-    if (tg?.close) tg.close();
-    else setSoon("Закрытие доступно внутри Telegram.");
-  }
-
-  async function placeStake() {
-    if (!data || !stakeTarget) return;
-    setBusy(true);
-    setError(null);
-
-    try {
-      if (data.round.id !== "demo-round") {
-        await api("/bets", {
-          method: "POST",
-          body: {
-            roundId: data.round.id,
-            assetId: stakeTarget.assetId,
-            eventId: stakeTarget.eventId,
-            outcome: stakeTarget.outcome,
-            horizon: "short",
-            amount: selectedAmount
-          }
-        });
-        const lobby = await api<LobbyResponse>("/lobby");
-        setData(normalizeLobby(lobby));
-      }
-
-      setNotice("Ставка отправлена на сервер.");
-      setStakeTarget(null);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Сервер не принял ставку.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (loading) {
-    return <main className="upliks-loading">Загрузка Upliks...</main>;
-  }
-
-  if (error && !data) {
-    return (
-      <main className="upliks-loading">
-        <section className="modal-card">
-          <h1>Вход не удался</h1>
-          <p>{error}</p>
-          <button type="button" className="primary-cta" onClick={boot}>
-            Повторить
-          </button>
-        </section>
-      </main>
-    );
-  }
-
-  if (!data) return null;
-
+function SectionTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
-    <main className="upliks-app">
-      <TopBar onClose={closeMiniApp} onMore={() => setSoon("Дополнительные действия появятся скоро.")} />
-
-      {notice ? <div className="app-toast">{notice}</div> : null}
-      {error ? <div className="app-toast danger">{error}</div> : null}
-
-      <section className="screen-stack">
-        {view === "lobby" ? (
-          <LobbyScreen
-            user={data.user}
-            round={data.round}
-            assets={popularAssets}
-            event={upcomingEvent}
-            now={now}
-            onPlay={() => setView("map")}
-            onOpenAsset={openAsset}
-            onOpenEvent={openEvent}
-            onAllEvents={() => setView("events")}
-            onSoon={setSoon}
-          />
-        ) : null}
-
-        {view === "map" ? (
-          <MapScreen
-            events={events}
-            cities={cities}
-            zoom={mapZoom}
-            onZoomIn={() => setMapZoom((value) => Math.min(1.18, round2(value + 0.06)))}
-            onZoomOut={() => setMapZoom((value) => Math.max(0.92, round2(value - 0.06)))}
-            onFullscreen={() => setSoon("Полноэкранный режим появится в следующем обновлении.")}
-            onOpenEvent={openEvent}
-            now={now}
-          />
-        ) : null}
-
-        {view === "eventDetail" && selectedEvent ? (
-          <EventDetailScreen
-            event={selectedEvent}
-            asset={assets.find((asset) => asset.id === selectedEvent.related_asset_id) ?? null}
-            now={now}
-            onClose={() => setView("map")}
-            onStake={(outcome) =>
-              setStakeTarget({
-                assetId: selectedEvent.related_asset_id,
-                eventId: selectedEvent.id,
-                outcome,
-                title: `${selectedEvent.title}: ${outcomeLabel(selectedEvent.transport_type, outcome)}`
-              })
-            }
-          />
-        ) : null}
-
-        {view === "assets" ? (
-          <AssetsScreen
-            assets={filteredAssets}
-            activeFilter={activeFilter}
-            onFilter={setActiveFilter}
-            onOpenAsset={openAsset}
-          />
-        ) : null}
-
-        {view === "assetDetail" && selectedAsset ? (
-          <AssetDetailScreen
-            asset={selectedAsset}
-            events={events.filter((event) => event.related_asset_id === selectedAsset.id)}
-            now={now}
-            onBack={() => setView("assets")}
-            onOpenEvent={openEvent}
-            onStake={() => setStakeTarget({ assetId: selectedAsset.id, title: selectedAsset.name })}
-          />
-        ) : null}
-
-        {view === "events" ? <FeedScreen feed={data.eventFeed} onFilter={() => setSoon("Фильтры ленты появятся скоро.")} /> : null}
-
-        {view === "profile" ? (
-          <ProfileScreen user={data.user} round={data.round} activity={data.activity} onVerify={() => setSoon("Проверка seed доступна после завершения раунда.")} />
-        ) : null}
-      </section>
-
-      <BottomNav
-        active={activeTab}
-        onChange={(next) => {
-          setView(next);
-          if (next === "assets") setSelectedAssetId((current) => current ?? assets[0]?.id ?? null);
-          if (next === "map") setSelectedEventId((current) => current ?? events[0]?.id ?? null);
-        }}
-      />
-
-      {stakeTarget ? (
-        <div className="overlay">
-          <section className="modal-card stake-sheet">
-            <div className="modal-head">
-              <div>
-                <span className="eyebrow">Ставка</span>
-                <h2>{stakeTarget.title}</h2>
-              </div>
-              <button type="button" className="icon-button" onClick={() => setStakeTarget(null)} aria-label="Закрыть">
-                <AppIcon name="close" size={18} />
-              </button>
-            </div>
-            <div className="stake-grid">
-              {stakeAmounts.map((amount) => (
-                <button
-                  key={amount}
-                  type="button"
-                  className={`stake-option ${selectedAmount === amount ? "selected" : ""}`}
-                  onClick={() => setSelectedAmount(amount)}
-                >
-                  <span>{amount.toLocaleString("ru-RU")}</span>
-                  <CurrencyGlyph size="sm" />
-                </button>
-              ))}
-            </div>
-            <button type="button" className="primary-cta" disabled={busy} onClick={placeStake}>
-              Сделать ставку
-            </button>
-          </section>
-        </div>
-      ) : null}
-
-      {soon ? (
-        <div className="overlay">
-          <section className="modal-card">
-            <div className="modal-head">
-              <h2>Скоро</h2>
-              <button type="button" className="icon-button" onClick={() => setSoon(null)} aria-label="Закрыть">
-                <AppIcon name="close" size={18} />
-              </button>
-            </div>
-            <p>{soon}</p>
-            <button type="button" className="primary-cta compact" onClick={() => setSoon(null)}>
-              Понятно
-            </button>
-          </section>
-        </div>
-      ) : null}
-    </main>
+    <div className="upliks-screen-head">
+      <div>
+        <h1>{title}</h1>
+        {subtitle ? <span>{subtitle}</span> : null}
+      </div>
+      {action}
+    </div>
   );
 }
 
-function TopBar({ onClose, onMore }: { onClose: () => void; onMore: () => void }) {
+function pad(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function formatTimer(totalSeconds: number) {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = safe % 60;
+  if (hours > 0) return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+  return `${pad(minutes)}:${pad(seconds)}`;
+}
+
+function secondsUntil(isoDate: string, now: number) {
+  return Math.max(0, Math.ceil((new Date(isoDate).getTime() - now) / 1000));
+}
+
+function eventAccent(tone: BackendMapEvent["tone"]): Accent {
+  if (tone === "green") return "green";
+  if (tone === "orange") return "orange";
+  if (tone === "red") return "red";
+  return "blue";
+}
+
+function eventTransport(transport: BackendMapEvent["transport_type"]): TransportType {
+  if (transport === "ship") return "ship";
+  if (transport === "truck") return "truck";
+  return "plane";
+}
+
+function feedAccent(tone: "green" | "red" | "orange" | "blue" | "purple"): FeedEvent["accent"] {
+  if (tone === "green") return "lime";
+  if (tone === "orange") return "orange";
+  if (tone === "red") return "red";
+  return "cyan";
+}
+
+function feedIcon(title: string): FeedEvent["icon"] {
+  const normalized = title.toLowerCase();
+  if (normalized.includes("танкер") || normalized.includes("шторм")) return normalized.includes("шторм") ? "activity" : "ship";
+  if (normalized.includes("грузовик")) return "truck";
+  return "plane";
+}
+
+function toFeed(items: LobbyResponse["eventFeed"]): FeedEvent[] {
+  return items.map((item) => ({
+    id: item.id,
+    title: item.title,
+    subtitle: item.assetName ? `${item.description} • ${item.assetName}` : item.description,
+    impact: `${item.impactPercent >= 0 ? "+" : ""}${item.impactPercent.toFixed(1)}%`,
+    time: item.timeAgo,
+    accent: feedAccent(item.tone),
+    icon: feedIcon(item.title)
+  }));
+}
+
+function toState(payload: LobbyResponse): LobbyState {
+  return {
+    user: payload.user,
+    round: payload.round,
+    assets: payload.assets,
+    rawEvents: payload.map.events,
+    feed: toFeed(payload.eventFeed),
+    profile: payload.profile,
+    history: payload.history,
+    leaderboard: payload.leaderboard,
+    missions: payload.missions,
+    referral: payload.referral
+  };
+}
+
+function formatMoney(value: number) {
+  return Math.max(0, value).toLocaleString("ru-RU");
+}
+
+function Money({ value, signed = false }: { value: number; signed?: boolean }) {
   return (
-    <header className="top-bar">
-      <button type="button" className="top-close" onClick={onClose}>
-        Закрыть
-      </button>
-      <div className="top-title">
-        <strong>Upliks</strong>
-        <span>мини-приложение</span>
+    <span className="money-value">
+      {signed && value > 0 ? "+" : ""}
+      {formatMoney(value)}
+      <span className="money-icon">₽</span>
+    </span>
+  );
+}
+
+function toneForAsset(asset: Pick<RoundAsset, "accent" | "change5m">) {
+  if (asset.accent === "purple") return "purple";
+  if (asset.accent === "green") return "lime";
+  if (asset.accent === "blue") return "blue";
+  if (asset.accent === "orange") return "orange";
+  if (asset.accent === "red") return "red";
+  return asset.change5m >= 0 ? "lime" : "red";
+}
+
+function assetSceneKind(asset: RoundAsset) {
+  const token = asset.iconToken.toLowerCase();
+  if (token.includes("logistics") || asset.name === "SkyForge") return "drone";
+  if (token.includes("tech") || asset.name === "QuantCircuit") return "chip";
+  if (token.includes("transport") || asset.name === "AeroTexa") return "transport";
+  if (token.includes("medicine") || asset.name === "NeuroPharm") return "lab";
+  if (token.includes("energy") || asset.name === "EcoVolt") return "energy";
+  return "chip";
+}
+
+function marketInterest(asset: RoundAsset, localBoost = 0) {
+  const baseline = Math.min(88, Math.max(16, Math.round(asset.players / 16)));
+  return Math.min(96, baseline + localBoost);
+}
+
+function normalizePoints(points: ChartPoint[]) {
+  const values = points.length ? points.map((point) => point.value) : [100, 101, 100.5, 102];
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = Math.max(1, max - min);
+  return values.map((value, index) => {
+    const x = values.length === 1 ? 0 : (index / (values.length - 1)) * 100;
+    const y = 46 - ((value - min) / span) * 34;
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  });
+}
+
+function Sparkline({ points, tone, large = false }: { points: ChartPoint[]; tone: string; large?: boolean }) {
+  const path = normalizePoints(points);
+  return (
+    <svg className={`sparkline ${large ? "large" : ""} tone-${tone}`} viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true">
+      <polyline className="sparkline-glow" points={path.join(" ")} />
+      <polyline className="sparkline-line" points={path.join(" ")} />
+    </svg>
+  );
+}
+
+function MarketInfluenceBadge({ interest, players }: { interest: number; players: number }) {
+  return (
+    <div className="market-influence" style={{ ["--interest" as string]: `${interest}%` }}>
+      <div className="market-influence__top">
+        <span>интерес</span>
+        <strong>{interest}%</strong>
       </div>
-      <button type="button" className="top-more" onClick={onMore} aria-label="Ещё">
-        <AppIcon name="more" size={20} />
-      </button>
-    </header>
+      <div className="market-influence__bar">
+        <i />
+      </div>
+      <span className="market-influence__meta">{formatMoney(players)} игроков</span>
+    </div>
+  );
+}
+
+function AssetMiniScene({ asset, interest, large = false }: { asset: RoundAsset; interest: number; large?: boolean }) {
+  const kind = assetSceneKind(asset);
+  const tone = toneForAsset(asset);
+  const mood = asset.change5m >= 0 ? "is-up" : "is-down";
+
+  return (
+    <div className={`asset-scene scene-${kind} tone-${tone} ${mood} ${large ? "large" : ""}`} style={{ ["--interest" as string]: `${interest}%` }}>
+      <span className="scene-flow flow-a" />
+      <span className="scene-flow flow-b" />
+      <span className="scene-flow flow-c" />
+      <span className="scene-glow" />
+
+      {kind === "drone" ? (
+        <div className="scene-drone">
+          <span className="rotor left" />
+          <span className="rotor right" />
+          <span className="drone-body" />
+        </div>
+      ) : null}
+
+      {kind === "chip" ? (
+        <div className="scene-chip">
+          <span />
+          <i />
+        </div>
+      ) : null}
+
+      {kind === "transport" ? (
+        <div className="scene-transport">
+          <span className="transport-body" />
+          <i className="trail one" />
+          <i className="trail two" />
+        </div>
+      ) : null}
+
+      {kind === "lab" ? (
+        <div className="scene-lab">
+          <span className="capsule" />
+          <i className="pulse" />
+        </div>
+      ) : null}
+
+      {kind === "energy" ? (
+        <div className="scene-energy">
+          <span className="battery"><i /></span>
+          <em />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AssetPreviewCard({
+  asset,
+  interest,
+  onClick,
+  compact = false
+}: {
+  asset: RoundAsset;
+  interest: number;
+  onClick: () => void;
+  compact?: boolean;
+}) {
+  const tone = toneForAsset(asset);
+
+  return (
+    <button type="button" className={`asset-live-card tone-${tone} ${compact ? "compact" : ""}`} onClick={onClick}>
+      <AssetMiniScene asset={asset} interest={interest} />
+      <div className="asset-live-card__copy">
+        <span className="asset-mini-letter">{asset.name.slice(0, 1)}</span>
+        <strong>{asset.name}</strong>
+        <span>{asset.sector}</span>
+      </div>
+      <div className="asset-live-card__numbers">
+        <span className={asset.change5m < 0 ? "bad" : "good"}>{`${asset.change5m >= 0 ? "+" : ""}${asset.change5m.toFixed(1)}%`}</span>
+        <Money value={asset.currentPrice} />
+      </div>
+      <Sparkline points={asset.chartData} tone={tone} />
+      <MarketInfluenceBadge interest={interest} players={asset.players} />
+    </button>
+  );
+}
+
+function EventListItem({ event, onClick }: { event: MapEvent; onClick: () => void }) {
+  const iconTone = event.accent === "green" ? "lime" : event.accent === "blue" ? "cyan" : event.accent;
+  const impact = event.outcome === "fail" ? event.failImpact : event.outcome === "delay" ? event.delayImpact : event.successImpact;
+
+  return (
+    <button type="button" className="upliks-feed-item tall is-clickable" onClick={onClick}>
+      <div className={`upliks-feed-icon tone-${iconTone}`}>
+        <AppIcon name={event.transport === "ship" ? "ship" : event.transport === "truck" ? "truck" : "plane"} size={18} tone={iconTone} />
+      </div>
+      <div className="upliks-feed-copy">
+        <strong>{event.title}</strong>
+        <span>{event.route} • {event.assetName}</span>
+      </div>
+      <div className="upliks-feed-side">
+        <strong>{event.timer}</strong>
+        <span className={impact < 0 ? "bad" : "good"}>{event.status === "resolved" ? `${impact >= 0 ? "+" : ""}${impact.toFixed(1)}%` : "в пути"}</span>
+      </div>
+    </button>
+  );
+}
+
+function RoundStatusPill({ status, seconds }: { status: string; seconds: number }) {
+  const label = seconds <= 0 ? "Завершён" : status || "Идёт";
+  return (
+    <span className="round-status-pill">
+      <i />
+      {label}
+    </span>
   );
 }
 
 function LobbyScreen({
-  user,
-  round,
+  state,
   assets,
-  event,
-  now,
-  onPlay,
+  events,
+  roundSeconds,
+  balance,
+  interestForAsset,
+  onTopUp,
+  onPlayRound,
   onOpenAsset,
   onOpenEvent,
-  onAllEvents,
-  onSoon
+  onOpenEvents
 }: {
-  user: User;
-  round: RoundSummary;
-  assets: WorldAsset[];
-  event: WorldEvent | null;
-  now: number;
-  onPlay: () => void;
-  onOpenAsset: (asset: WorldAsset) => void;
-  onOpenEvent: (event: WorldEvent) => void;
-  onAllEvents: () => void;
-  onSoon: (message: string) => void;
+  state: LobbyState;
+  assets: RoundAsset[];
+  events: MapEvent[];
+  roundSeconds: number;
+  balance: number;
+  interestForAsset: (asset: RoundAsset) => number;
+  onTopUp: () => void;
+  onPlayRound: () => void;
+  onOpenAsset: (asset: RoundAsset) => void;
+  onOpenEvent: (event: MapEvent) => void;
+  onOpenEvents: () => void;
 }) {
   return (
-    <>
-      <section className="lobby-wallet">
-        <div className="balance-pill">
-          <InlineValue value={user.balance || 3_810} />
+    <section className="upliks-tab-screen">
+      <div className="lobby-wallet-row">
+        <div className="balance-chip">
+          <span>баланс</span>
+          <strong><Money value={balance} /></strong>
         </div>
-        <button type="button" className="icon-button add" onClick={() => onSoon("Внутриигровое пополнение появится позже.")} aria-label="Добавить">
-          <AppIcon name="plus" size={18} />
+        <button type="button" className="round-icon-button top-up" aria-label="Добавить 1000 демо рублей" onClick={onTopUp}>
+          <AppIcon name="plus" size={18} tone="lime" />
         </button>
-        <button type="button" className="icon-button" onClick={() => onSoon("Подарки появятся скоро.")} aria-label="Подарки">
-          <AppIcon name="gift" size={18} />
+        <button type="button" className="round-icon-button" aria-label="Подарки">
+          <AppIcon name="gift" size={18} tone="purple" />
         </button>
-        <button type="button" className="icon-button" onClick={() => onSoon("Уведомления появятся скоро.")} aria-label="Уведомления">
-          <AppIcon name="bell" size={18} />
+        <button type="button" className="round-icon-button" aria-label="Уведомления">
+          <AppIcon name="bell" size={18} tone="cyan" />
         </button>
-        <div className="player-avatar">{avatarInitial(user)}</div>
-      </section>
+        <div className="upliks-avatar-badge">{(state.user.nickname ?? state.user.firstName ?? "U").slice(0, 1)}</div>
+      </div>
 
-      <section className="round-card">
-        <div className="round-head">
+      <div className="upliks-hero-card round-card">
+        <div className="round-card__head">
           <div>
-            <span className="eyebrow">Раунд #{round.number}</span>
-            <h1>{formatRoundClock(round, now)}</h1>
+            <span className="upliks-label">Раунд #{state.round.number}</span>
+            <RoundStatusPill status={state.round.statusLabel} seconds={roundSeconds} />
           </div>
-          <span className="status-chip">{round.statusLabel}</span>
+          <strong className="round-timer">{formatTimer(roundSeconds)}</strong>
         </div>
-        <button type="button" className="primary-cta" onClick={onPlay}>
+
+        <div className="round-energy-panel">
+          <div className="round-energy-panel__pulse" />
+          <span>рынок влияния активен</span>
+          <strong>ставки, события и интерес игроков уже двигают раунд</strong>
+        </div>
+
+        <button type="button" className="upliks-pill-button wide" onClick={onPlayRound}>
           Играть в раунд
         </button>
-        <div className="round-metrics">
-          <Metric label="Призовой фонд" value={<InlineValue value={round.prizePool} />} />
-          <Metric label="Комиссия платформы" value={<strong>{round.platformFeePercent}%</strong>} />
-        </div>
-        <div className="participant-row">
-          <div className="avatar-stack">
-            {round.participantAvatars.map((item, index) => (
-              <span key={`${item}-${index}`}>{item}</span>
-            ))}
-          </div>
-          <p>{round.participantCount.toLocaleString("ru-RU")} игроков участвуют</p>
-        </div>
-      </section>
 
-      <SectionHead title="Популярные активы" />
-      <div className="popular-grid">
-        {assets.map((asset) => (
-          <button key={asset.id} type="button" className={`popular-card tone-${asset.accent}`} onClick={() => onOpenAsset(asset)}>
-            <div>
-              <strong>{asset.name}</strong>
-              <span>{asset.sector}</span>
-            </div>
-            <span className={`change ${asset.change5m >= 0 ? "good" : "bad"}`}>{formatPercent(asset.change5m)}</span>
-            <Sparkline points={asset.chartData} tone={asset.accent} compact />
-          </button>
-        ))}
-      </div>
-
-      <SectionHead title="Лента событий" action="Все" onAction={onAllEvents} />
-      {event ? (
-        <button type="button" className={`event-preview tone-${event.tone}`} onClick={() => onOpenEvent(event)}>
-          <div className="event-icon">
-            <AppIcon name={transportIcon(event.transport_type)} size={20} tone={toneToIcon(event.tone)} />
+        <div className="round-card__stats">
+          <div>
+            <span>призовой фонд</span>
+            <strong><Money value={state.round.prizePool} /></strong>
           </div>
           <div>
-            <strong>{event.title}</strong>
-            <span>
-              {event.route_from} → {event.route_to}
-            </span>
-            <small>{event.description}</small>
+            <span>комиссия</span>
+            <strong>{state.round.platformFeePercent}%</strong>
           </div>
-          <time>{formatEventClock(event, now)}</time>
-        </button>
-      ) : null}
-    </>
-  );
-}
-
-function MapScreen({
-  events,
-  cities,
-  zoom,
-  onZoomIn,
-  onZoomOut,
-  onFullscreen,
-  onOpenEvent,
-  now
-}: {
-  events: WorldEvent[];
-  cities: CityLabel[];
-  zoom: number;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onFullscreen: () => void;
-  onOpenEvent: (event: WorldEvent) => void;
-  now: number;
-}) {
-  return (
-    <section className="map-screen">
-      <div className="map-toolbar">
-        <div>
-          <span className="eyebrow">Карта событий</span>
-          <h1>Мир маршрутов</h1>
         </div>
-        <div className="map-actions">
-          <button type="button" className="icon-button" onClick={onZoomIn} aria-label="Приблизить">
-            <AppIcon name="plus" size={18} />
-          </button>
-          <button type="button" className="icon-button" onClick={onZoomOut} aria-label="Отдалить">
-            <AppIcon name="minus" size={18} />
-          </button>
-          <button type="button" className="icon-button" onClick={onFullscreen} aria-label="Во весь экран">
-            <AppIcon name="fullscreen" size={18} />
-          </button>
-        </div>
-      </div>
 
-      <div className="map-canvas">
-        <div className="map-zoom-layer" style={{ "--map-zoom": zoom } as CSSProperties}>
-          <WorldMapSvg />
-          <svg className="route-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-            {events.map((event) => (
-              <line
-                key={event.id}
-                x1={event.map.from.x}
-                y1={event.map.from.y}
-                x2={event.map.to.x}
-                y2={event.map.to.y}
-                className={`route-line tone-${event.tone}`}
-              />
+        <div className="participant-strip">
+          <div className="participant-avatars">
+            {state.round.participantAvatars.slice(0, 5).map((avatar, index) => (
+              <span key={`${avatar}:${index}`}>{avatar}</span>
             ))}
-          </svg>
-          {cities.map((city) => (
-            <span key={city.name} className="city-label" style={{ left: `${city.x}%`, top: `${city.y}%` }}>
-              {city.name}
-            </span>
-          ))}
-          {events.map((event) => (
-            <button
-              key={event.id}
-              type="button"
-              className={`map-event-card tone-${event.tone}`}
-              style={{ left: `${event.map.card.x}%`, top: `${event.map.card.y}%` }}
-              onClick={() => onOpenEvent(event)}
-            >
-              <strong>{event.title}</strong>
-              <span>
-                {event.route_from} → {event.route_to}
-              </span>
-              <time>{formatEventClock(event, now)}</time>
-            </button>
-          ))}
-          {events.map((event) => (
-            <button
-              key={`${event.id}-vehicle`}
-              type="button"
-              className={`vehicle-pin tone-${event.tone}`}
-              style={{ left: `${event.map.vehicle.x}%`, top: `${event.map.vehicle.y}%` }}
-              onClick={() => onOpenEvent(event)}
-              aria-label={event.title}
-            >
-              <AppIcon name={transportIcon(event.transport_type)} size={18} tone={toneToIcon(event.tone)} />
-            </button>
-          ))}
-        </div>
-        <div className="map-legend">
-          <span className="legend-dot growth" /> Рост
-          <span className="legend-dot fall" /> Падение
-          <span className="legend-dot neutral" /> Нейтрально
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function EventDetailScreen({
-  event,
-  asset,
-  now,
-  onClose,
-  onStake
-}: {
-  event: WorldEvent;
-  asset: WorldAsset | null;
-  now: number;
-  onClose: () => void;
-  onStake: (outcome: EventOutcome) => void;
-}) {
-  const outcomes: EventOutcome[] = ["success", "delay", "fail"];
-
-  return (
-    <section className="detail-screen">
-      <div className="detail-head">
-        <div>
-          <span className="eyebrow">Текущее событие</span>
-          <h1>{event.title}</h1>
-        </div>
-        <button type="button" className="icon-button" onClick={onClose} aria-label="Закрыть событие">
-          <AppIcon name="close" size={18} />
-        </button>
-      </div>
-
-      <article className={`event-hero tone-${event.tone}`}>
-        <div className="big-event-icon">
-          <AppIcon name={transportIcon(event.transport_type)} size={28} tone={toneToIcon(event.tone)} />
-        </div>
-        <div>
-          <h2>{event.transport_type === "plane" ? "Авиадоставка" : event.transport_type === "ship" ? "Морской маршрут" : "Наземный маршрут"}</h2>
-          <p>
-            {event.route_from} → {event.route_to}
-          </p>
-          <span>{event.description}</span>
-        </div>
-      </article>
-
-      <section className="timer-card">
-        <span>Прибытие через</span>
-        <strong>{formatEventClock(event, now)}</strong>
-      </section>
-
-      <div className="progress-card">
-        <div className="progress-track">
-          <span style={{ width: `${eventProgress(event, now)}%` }} />
-        </div>
-        <div className="progress-labels">
-          <span>Вылет</span>
-          <span>В пути</span>
-          <span>Прибытие</span>
+          </div>
+          <span>{formatMoney(state.round.participantCount)} игроков участвуют</span>
         </div>
       </div>
 
-      <section className="impact-card">
-        <span className="eyebrow">Влияние на актив</span>
-        <strong>{asset?.name ?? event.related_asset_name}</strong>
-      </section>
+      <div className="upliks-block-card">
+        <div className="upliks-block-head">
+          <h2>Популярные активы</h2>
+          <span>деньги = влияние</span>
+        </div>
 
-      <SectionHead title="Возможные исходы" />
-      <div className="outcome-list">
-        {outcomes.map((outcome) => (
-          <button key={outcome} type="button" className="outcome-card" onClick={() => onStake(outcome)}>
-            <div>
-              <strong>{outcomeLabel(event.transport_type, outcome)}</strong>
-              <span>вероятность {eventProbability(event, outcome)}%</span>
-            </div>
-            <span className={`change ${eventImpact(event, outcome) >= 0 ? "good" : "bad"}`}>
-              {event.related_asset_name} {formatPercent(eventImpact(event, outcome))}
-            </span>
-          </button>
-        ))}
+        <div className="upliks-asset-mini-grid">
+          {assets.slice(0, 3).map((asset) => (
+            <AssetPreviewCard key={asset.id} asset={asset} interest={interestForAsset(asset)} compact onClick={() => onOpenAsset(asset)} />
+          ))}
+        </div>
+      </div>
+
+      <div className="upliks-block-card">
+        <div className="upliks-block-head">
+          <h2>Лента событий</h2>
+          <button type="button" className="tiny-link-button" onClick={onOpenEvents}>Все</button>
+        </div>
+
+        <div className="upliks-list">
+          {(events.length ? events.slice(0, 1) : []).map((event) => (
+            <EventListItem key={event.id} event={event} onClick={() => onOpenEvent(event)} />
+          ))}
+          {state.feed.slice(0, 2).map((item) => (
+            <article key={item.id} className="upliks-feed-item">
+              <div className={`upliks-feed-icon tone-${item.accent}`}>
+                <AppIcon name={item.icon} size={18} tone={item.accent === "cyan" ? "cyan" : item.accent} />
+              </div>
+              <div className="upliks-feed-copy">
+                <strong>{item.title}</strong>
+                <span>{item.subtitle}</span>
+              </div>
+              <div className="upliks-feed-side">
+                <strong className={item.impact.startsWith("-") ? "bad" : "good"}>{item.impact}</strong>
+                <span>{item.time}</span>
+              </div>
+            </article>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -839,31 +669,46 @@ function EventDetailScreen({
 
 function AssetsScreen({
   assets,
-  activeFilter,
-  onFilter,
+  interestForAsset,
   onOpenAsset
 }: {
-  assets: WorldAsset[];
-  activeFilter: (typeof filters)[number];
-  onFilter: (filter: (typeof filters)[number]) => void;
-  onOpenAsset: (asset: WorldAsset) => void;
+  assets: RoundAsset[];
+  interestForAsset: (asset: RoundAsset) => number;
+  onOpenAsset: (asset: RoundAsset) => void;
 }) {
+  const [filter, setFilter] = useState("Все");
+  const filters = ["Все", "Технологии", "Транспорт", "Энергетика"];
+  const filteredAssets = filter === "Все" ? assets : assets.filter((asset) => asset.sector === filter);
+
   return (
-    <section className="assets-screen">
-      <div className="screen-title">
-        <span className="eyebrow">Активы</span>
-        <h1>Список активов</h1>
-      </div>
+    <section className="upliks-tab-screen">
+      <SectionTitle title="Активы" subtitle="Живые компании текущего раунда: цена, интерес игроков, поток денег и события." />
+
       <div className="filter-row">
-        {filters.map((filter) => (
-          <button key={filter} type="button" className={activeFilter === filter ? "active" : ""} onClick={() => onFilter(filter)}>
-            {filter}
+        {filters.map((item) => (
+          <button key={item} type="button" className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>
+            {item}
           </button>
         ))}
       </div>
-      <div className="asset-list">
-        {assets.map((asset) => (
-          <AssetRow key={asset.id} asset={asset} onOpen={() => onOpenAsset(asset)} />
+
+      <div className="upliks-list">
+        {filteredAssets.map((asset) => (
+          <button key={asset.id} type="button" className={`asset-row-live tone-${toneForAsset(asset)}`} onClick={() => onOpenAsset(asset)}>
+            <AssetMiniScene asset={asset} interest={interestForAsset(asset)} />
+            <div className="asset-row-live__main">
+              <div>
+                <strong>{asset.name}</strong>
+                <span>{asset.sector}</span>
+              </div>
+              <Sparkline points={asset.chartData} tone={toneForAsset(asset)} />
+              <MarketInfluenceBadge interest={interestForAsset(asset)} players={asset.players} />
+            </div>
+            <div className="asset-row-live__side">
+              <strong><Money value={asset.currentPrice} /></strong>
+              <span className={asset.change5m < 0 ? "bad" : "good"}>{`${asset.change5m >= 0 ? "+" : ""}${asset.change5m.toFixed(1)}%`}</span>
+            </div>
+          </button>
         ))}
       </div>
     </section>
@@ -873,457 +718,986 @@ function AssetsScreen({
 function AssetDetailScreen({
   asset,
   events,
-  now,
+  interest,
   onBack,
-  onOpenEvent,
-  onStake
+  onMarket,
+  onRound,
+  onOpenEvent
 }: {
-  asset: WorldAsset;
-  events: WorldEvent[];
-  now: number;
+  asset: RoundAsset;
+  events: MapEvent[];
+  interest: number;
   onBack: () => void;
-  onOpenEvent: (event: WorldEvent) => void;
-  onStake: () => void;
+  onMarket: () => void;
+  onRound: () => void;
+  onOpenEvent: (event: MapEvent) => void;
+}) {
+  const tone = toneForAsset(asset);
+
+  return (
+    <section className="upliks-tab-screen">
+      <SectionTitle
+        title={asset.name}
+        subtitle={asset.sector}
+        action={
+          <button type="button" className="round-icon-button" aria-label="Закрыть актив" onClick={onBack}>
+            <AppIcon name="close" size={18} tone="text" />
+          </button>
+        }
+      />
+
+      <div className={`asset-detail-hero tone-${tone}`}>
+        <AssetMiniScene asset={asset} interest={interest} large />
+        <Sparkline points={asset.chartData} tone={tone} large />
+      </div>
+
+      <div className="metric-grid">
+        <div>
+          <span>текущая цена</span>
+          <strong><Money value={asset.currentPrice} /></strong>
+        </div>
+        <div>
+          <span>изменение 5M</span>
+          <strong className={asset.change5m < 0 ? "bad" : "good"}>{`${asset.change5m >= 0 ? "+" : ""}${asset.change5m.toFixed(1)}%`}</strong>
+        </div>
+        <div>
+          <span>игроков</span>
+          <strong>{formatMoney(asset.players)}</strong>
+        </div>
+        <div>
+          <span>вложено</span>
+          <strong><Money value={asset.pool} /></strong>
+        </div>
+      </div>
+
+      <MarketInfluenceBadge interest={interest} players={asset.players} />
+
+      <div className="action-pair">
+        <button type="button" className="upliks-pill-button wide" onClick={onMarket}>Вложить на бирже</button>
+        <button type="button" className="secondary-button" onClick={onRound}>Сделать ставку</button>
+      </div>
+
+      <div className="upliks-block-card">
+        <div className="upliks-block-head">
+          <h2>Влияющие события</h2>
+          <span>{events.length || 0} активных триггера</span>
+        </div>
+        <div className="upliks-list">
+          {events.length ? (
+            events.map((event) => <EventListItem key={event.id} event={event} onClick={() => onOpenEvent(event)} />)
+          ) : (
+            <div className="empty-state">Сейчас актив двигается в основном за счёт интереса игроков.</div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MarketScreen({
+  asset,
+  balance,
+  interest,
+  direction,
+  amount,
+  onBack,
+  onDirection,
+  onAmount,
+  onInvest
+}: {
+  asset: RoundAsset;
+  balance: number;
+  interest: number;
+  direction: Direction;
+  amount: number;
+  onBack: () => void;
+  onDirection: (direction: Direction) => void;
+  onAmount: (amount: number) => void;
+  onInvest: () => void;
 }) {
   return (
-    <section className="detail-screen">
-      <div className="detail-head">
-        <div>
-          <span className="eyebrow">{asset.sector}</span>
-          <h1>{asset.name}</h1>
+    <section className="upliks-tab-screen">
+      <SectionTitle
+        title="Биржа влияния"
+        subtitle="Демо-режим: вклад меняет визуальный интерес к активу."
+        action={
+          <button type="button" className="round-icon-button" aria-label="Назад" onClick={onBack}>
+            <AppIcon name="close" size={18} tone="text" />
+          </button>
+        }
+      />
+
+      <div className={`market-panel tone-${toneForAsset(asset)}`}>
+        <div className="market-panel__head">
+          <div>
+            <strong>{asset.name}</strong>
+            <span>{asset.sector}</span>
+          </div>
+          <Money value={balance} />
         </div>
-        <button type="button" className="icon-button" onClick={onBack} aria-label="Назад к активам">
-          <AppIcon name="close" size={18} />
-        </button>
+        <AssetMiniScene asset={asset} interest={interest} large />
+        <MarketInfluenceBadge interest={interest} players={asset.players} />
       </div>
 
-      <section className={`large-chart-card tone-${asset.accent}`}>
-        <Sparkline points={asset.chartData} tone={asset.accent} large />
-      </section>
-
-      <div className="asset-stats">
-        <Metric label="текущая цена" value={<InlineValue value={asset.currentPrice} />} />
-        <Metric label="изменение 5M" value={<strong className={asset.change5m >= 0 ? "good" : "bad"}>{formatPercent(asset.change5m)}</strong>} />
-        <Metric label="игроков" value={<strong>{asset.players.toLocaleString("ru-RU")}</strong>} />
-        <Metric label="вложено" value={<InlineValue value={asset.pool} />} />
+      <div className="choice-card">
+        <span className="choice-label">Направление влияния</span>
+        <div className="segmented-control">
+          <button type="button" className={direction === "up" ? "active" : ""} onClick={() => onDirection("up")}>Вложить в рост</button>
+          <button type="button" className={direction === "down" ? "active danger" : "danger"} onClick={() => onDirection("down")}>Вложить в падение</button>
+        </div>
       </div>
 
-      <button type="button" className="primary-cta" onClick={onStake}>
-        Сделать ставку
+      <div className="choice-card">
+        <span className="choice-label">Сумма</span>
+        <div className="amount-row">
+          {MARKET_AMOUNTS.map((value) => (
+            <button key={value} type="button" className={amount === value ? "active" : ""} onClick={() => onAmount(value)}>
+              <Money value={value} />
+            </button>
+          ))}
+          <button type="button" className={amount === balance ? "active" : ""} onClick={() => onAmount(balance)}>
+            всё
+          </button>
+        </div>
+        <input className="amount-input" inputMode="numeric" value={String(amount)} onChange={(event) => onAmount(Number(event.target.value.replace(/\D/g, "")))} />
+      </div>
+
+      <button type="button" className="upliks-pill-button wide" onClick={onInvest}>
+        Подтвердить влияние
       </button>
+    </section>
+  );
+}
 
-      <SectionHead title="Влияющие события" />
-      <div className="influence-list">
-        {events.map((event) => (
-          <button key={event.id} type="button" className={`influence-card tone-${event.tone}`} onClick={() => onOpenEvent(event)}>
-            <div className="event-icon">
-              <AppIcon name={transportIcon(event.transport_type)} size={18} tone={toneToIcon(event.tone)} />
-            </div>
-            <div>
-              <strong>{event.title}</strong>
-              <span>
-                {event.route_from} → {event.route_to}
-              </span>
-              <small>прибытие через {formatEventClock(event, now)}</small>
-            </div>
-            <span className={`change ${event.success_impact >= 0 ? "good" : "bad"}`}>потенциал {formatPercent(event.success_impact)}</span>
+function RoundPlayScreen({
+  assets,
+  events,
+  round,
+  roundSeconds,
+  balance,
+  selectedAssetId,
+  direction,
+  amount,
+  acceptedBet,
+  interestForAsset,
+  onSelectAsset,
+  onDirection,
+  onAmount,
+  onConfirm,
+  onOpenMap,
+  onOpenAsset
+}: {
+  assets: RoundAsset[];
+  events: MapEvent[];
+  round: Round;
+  roundSeconds: number;
+  balance: number;
+  selectedAssetId: string | null;
+  direction: Direction;
+  amount: number;
+  acceptedBet: AcceptedRoundBet | null;
+  interestForAsset: (asset: RoundAsset) => number;
+  onSelectAsset: (assetId: string) => void;
+  onDirection: (direction: Direction) => void;
+  onAmount: (amount: number) => void;
+  onConfirm: () => void;
+  onOpenMap: () => void;
+  onOpenAsset: (asset: RoundAsset) => void;
+}) {
+  const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? assets[0] ?? null;
+
+  return (
+    <section className="upliks-tab-screen">
+      <SectionTitle title="Участие в раунде" subtitle={`Раунд #${round.number} • до конца ${formatTimer(roundSeconds)}`} />
+
+      <div className="round-entry-card">
+        <div>
+          <RoundStatusPill status={round.statusLabel} seconds={roundSeconds} />
+          <strong className="round-timer">{formatTimer(roundSeconds)}</strong>
+        </div>
+        <div>
+          <span>доступно</span>
+          <strong><Money value={balance} /></strong>
+        </div>
+      </div>
+
+      <div className="round-asset-picker">
+        {assets.map((asset) => (
+          <button key={asset.id} type="button" className={selectedAsset?.id === asset.id ? "active" : ""} onClick={() => onSelectAsset(asset.id)}>
+            <AssetMiniScene asset={asset} interest={interestForAsset(asset)} />
+            <span>{asset.name}</span>
+            <strong className={asset.change5m < 0 ? "bad" : "good"}>{`${asset.change5m >= 0 ? "+" : ""}${asset.change5m.toFixed(1)}%`}</strong>
           </button>
         ))}
       </div>
-    </section>
-  );
-}
 
-function FeedScreen({ feed, onFilter }: { feed: EventFeedItem[]; onFilter: () => void }) {
-  return (
-    <section className="feed-screen">
-      <div className="feed-head">
-        <div>
-          <span className="eyebrow">Лента событий</span>
-          <h1>События мира</h1>
+      {selectedAsset ? (
+        <div className="choice-card">
+          <div className="choice-card__head">
+            <span className="choice-label">Прогноз по {selectedAsset.name}</span>
+            <button type="button" className="tiny-link-button" onClick={() => onOpenAsset(selectedAsset)}>детали</button>
+          </div>
+          <div className="segmented-control">
+            <button type="button" className={direction === "up" ? "active" : ""} onClick={() => onDirection("up")}>Пойдёт вверх</button>
+            <button type="button" className={direction === "down" ? "active danger" : "danger"} onClick={() => onDirection("down")}>Пойдёт вниз</button>
+          </div>
         </div>
-        <button type="button" className="filter-button" onClick={onFilter}>
-          Все
-        </button>
-      </div>
-      <div className="feed-list">
-        {feed.map((item) => (
-          <article key={item.id} className={`feed-card tone-${item.tone}`}>
-            <div>
-              <strong>{item.title}</strong>
-              <span>{item.description}</span>
-              {item.assetName ? <small>для {item.assetName}</small> : null}
-            </div>
-            <div className="feed-side">
-              <span className={`change ${item.impactPercent >= 0 ? "good" : "bad"}`}>{formatPercent(item.impactPercent)}</span>
-              <time>{item.timeAgo}</time>
-            </div>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function ProfileScreen({
-  user,
-  round,
-  activity,
-  onVerify
-}: {
-  user: User;
-  round: RoundSummary;
-  activity: ActivityItem[];
-  onVerify: () => void;
-}) {
-  return (
-    <section className="profile-screen">
-      <div className="profile-card">
-        <div className="player-avatar large">{avatarInitial(user)}</div>
-        <div>
-          <span className="eyebrow">Профиль</span>
-          <h1>{user.nickname ?? user.firstName ?? "Игрок"}</h1>
-          <InlineValue value={user.balance || 3_810} />
-        </div>
-      </div>
-      <section className="fairness-card">
-        <span className="eyebrow">Fairness</span>
-        <strong>Seed hash опубликован</strong>
-        <p>{round.seedHash}</p>
-        <button type="button" className="secondary-cta" onClick={onVerify}>
-          Проверить раунд
-        </button>
-      </section>
-      <SectionHead title="Живая активность" />
-      <div className="activity-list">
-        {activity.map((item) => (
-          <article key={item.id} className="activity-row">
-            <span />
-            <p>{item.text}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function AssetRow({ asset, onOpen }: { asset: WorldAsset; onOpen: () => void }) {
-  return (
-    <button type="button" className={`asset-row tone-${asset.accent}`} onClick={onOpen}>
-      <div className="asset-badge">{asset.name.slice(0, 1)}</div>
-      <div className="asset-main">
-        <strong>{asset.name}</strong>
-        <span>{asset.sector}</span>
-        <div className="asset-row-meta">
-          <InlineValue value={asset.currentPrice} />
-          <span>{asset.players.toLocaleString("ru-RU")} игроков</span>
-        </div>
-      </div>
-      <div className="asset-side">
-        <span className={`change ${asset.change5m >= 0 ? "good" : "bad"}`}>{formatPercent(asset.change5m)}</span>
-        <Sparkline points={asset.chartData} tone={asset.accent} compact />
-      </div>
-    </button>
-  );
-}
-
-function SectionHead({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) {
-  return (
-    <div className="section-head">
-      <h2>{title}</h2>
-      {action ? (
-        <button type="button" onClick={onAction}>
-          {action}
-        </button>
       ) : null}
-    </div>
+
+      <div className="choice-card">
+        <span className="choice-label">Сумма ставки</span>
+        <div className="amount-row">
+          {[100, 500, 1000].map((value) => (
+            <button key={value} type="button" className={amount === value ? "active" : ""} onClick={() => onAmount(value)}>
+              <Money value={value} />
+            </button>
+          ))}
+          <button type="button" onClick={() => onAmount(bestRoundAmount(balance))}>всё</button>
+        </div>
+        <input className="amount-input" inputMode="numeric" value={String(amount)} onChange={(event) => onAmount(Number(event.target.value.replace(/\D/g, "")))} />
+      </div>
+
+      <button type="button" className="upliks-pill-button wide" onClick={onConfirm}>
+        Подтвердить ставку
+      </button>
+
+      {acceptedBet ? (
+        <div className="accepted-bet-card">
+          <span>текущая ставка</span>
+          <strong>{acceptedBet.assetName} • {acceptedBet.direction === "up" ? "вверх" : "вниз"} • <Money value={acceptedBet.amount} /></strong>
+        </div>
+      ) : null}
+
+      <div className="upliks-block-card">
+        <div className="upliks-block-head">
+          <h2>События рядом</h2>
+          <button type="button" className="tiny-link-button" onClick={onOpenMap}>карта</button>
+        </div>
+        <div className="round-event-strip">
+          {events.slice(0, 3).map((event) => (
+            <span key={event.id}>{event.title} • {event.timer}</span>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
-function Metric({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="metric">
-      <span>{label}</span>
-      {value}
-    </div>
-  );
-}
-
-function Sparkline({
-  points,
-  tone,
-  compact,
-  large
+function MapScreen({
+  zoom,
+  onZoomIn,
+  onZoomOut,
+  expanded,
+  onToggleExpanded,
+  events,
+  onEventSelect
 }: {
-  points: ChartPoint[];
-  tone: Accent;
-  compact?: boolean;
-  large?: boolean;
+  zoom: number;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  events: MapEvent[];
+  onEventSelect: (event: MapEvent) => void;
 }) {
-  const path = useMemo(() => buildSparkPath(points), [points]);
   return (
-    <div className={`sparkline tone-${tone} ${compact ? "compact" : ""} ${large ? "large" : ""}`}>
-      <svg viewBox="0 0 120 56" preserveAspectRatio="none" aria-hidden="true">
-        <path className="spark-area" d={`${path} L120 56 L0 56 Z`} />
-        <path className="spark-glow" d={path} />
-        <path className="spark-line" d={path} />
-      </svg>
-    </div>
+    <section className={`upliks-map-shell ${expanded ? "is-expanded" : ""}`}>
+      <div className="upliks-map-head">
+        <div>
+          <h1>Карта событий</h1>
+          <p className="upliks-live-indicator">
+            <span className="upliks-live-dot" />
+            Серверное <strong>время</strong>
+          </p>
+        </div>
+
+        <button
+          type="button"
+          className="upliks-map-action"
+          aria-label={expanded ? "Свернуть карту" : "Расширить карту"}
+          aria-pressed={expanded}
+          onClick={onToggleExpanded}
+        >
+          <AppIcon name="fullscreen" size={18} tone="text" />
+        </button>
+      </div>
+
+      <EventMap events={events} zoom={zoom} onZoomIn={onZoomIn} onZoomOut={onZoomOut} onEventSelect={onEventSelect} />
+      <Legend />
+    </section>
   );
 }
 
-function WorldMapSvg() {
+function EventDetailScreen({
+  event,
+  asset,
+  onBack,
+  onAsset
+}: {
+  event: MapEvent;
+  asset: RoundAsset | null;
+  onBack: () => void;
+  onAsset: () => void;
+}) {
+  const progress = Math.round((1 - event.remainingSeconds / Math.max(1, event.durationSeconds)) * 100);
+  const outcomes = outcomeRows(event);
+
   return (
-    <svg className="world-map" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-      <path d="M8 30 18 24 31 29 27 43 17 48 10 42Z" />
-      <path d="M27 57 36 59 41 72 34 86 27 76Z" />
-      <path d="M45 24 58 20 70 29 65 42 51 40 43 33Z" />
-      <path d="M58 44 72 42 84 51 78 64 63 60Z" />
-      <path d="M72 68 88 70 93 82 82 88 72 80Z" />
-      <path d="M47 54 58 57 57 78 48 86 42 72Z" />
-    </svg>
+    <section className="upliks-tab-screen">
+      <SectionTitle
+        title="Текущее событие"
+        subtitle={event.status === "resolved" ? "исход зафиксирован сервером" : "маршрут в пути"}
+        action={
+          <button type="button" className="round-icon-button" aria-label="Закрыть событие" onClick={onBack}>
+            <AppIcon name="close" size={18} tone="text" />
+          </button>
+        }
+      />
+
+      <div className={`event-detail-card tone-${event.accent}`}>
+        <div className="event-detail-card__top">
+          <span className="upliks-map-event-icon">
+            <AppIcon name={event.transport === "ship" ? "ship" : event.transport === "truck" ? "truck" : "plane"} size={20} tone={event.accent === "blue" ? "cyan" : event.accent === "green" ? "lime" : event.accent} />
+          </span>
+          <div>
+            <strong>{event.title}</strong>
+            <span>{event.route}</span>
+          </div>
+        </div>
+        <p>{event.description}</p>
+        <div className="event-timer-block">
+          <span>{event.status === "resolved" ? "Завершено" : "Прибытие через"}</span>
+          <strong>{event.timer}</strong>
+        </div>
+        <div className="event-progress">
+          <i style={{ width: `${progress}%` }} />
+        </div>
+        <div className="event-progress-labels">
+          <span>Вылет</span>
+          <span>В пути</span>
+          <span>Прибытие</span>
+        </div>
+      </div>
+
+      <button type="button" className="linked-asset-card" onClick={onAsset}>
+        <span>Влияние на актив</span>
+        <strong>{asset?.name ?? event.assetName}</strong>
+        <AppIcon name="arrow-right" size={18} tone="lime" />
+      </button>
+
+      <div className="upliks-block-card">
+        <div className="upliks-block-head">
+          <h2>Возможные исходы</h2>
+          <span>рассчитаны на сервере</span>
+        </div>
+        <div className="outcome-list">
+          {outcomes.map((outcome) => (
+            <div key={outcome.id} className={event.outcome === outcome.id ? "active" : ""}>
+              <strong>{outcome.label}</strong>
+              <span>вероятность {outcome.probability}%</span>
+              <em className={outcome.impact < 0 ? "bad" : "good"}>{event.assetName} {outcome.impact >= 0 ? "+" : ""}{outcome.impact.toFixed(1)}%</em>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
-function buildSparkPath(points: ChartPoint[]) {
-  const safePoints = points.length > 1 ? points : [{ tick: 0, value: 100 }, { tick: 1, value: 101 }];
-  const values = safePoints.map((point) => point.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = Math.max(1, max - min);
-  return safePoints
-    .map((point, index) => {
-      const x = (index / Math.max(1, safePoints.length - 1)) * 120;
-      const y = 48 - ((point.value - min) / range) * 40;
-      return `${index === 0 ? "M" : "L"}${round2(x)} ${round2(y)}`;
-    })
-    .join(" ");
+function EventsScreen({
+  events,
+  feed,
+  onOpenEvent
+}: {
+  events: MapEvent[];
+  feed: FeedEvent[];
+  onOpenEvent: (event: MapEvent) => void;
+}) {
+  return (
+    <section className="upliks-tab-screen">
+      <SectionTitle
+        title="Лента событий"
+        subtitle="Текущие и завершённые триггеры, которые двигают настроение активов."
+        action={<button type="button" className="tiny-link-button">Все</button>}
+      />
+
+      <div className="upliks-list">
+        {events.map((event) => (
+          <EventListItem key={event.id} event={event} onClick={() => onOpenEvent(event)} />
+        ))}
+      </div>
+
+      <div className="upliks-block-card">
+        <div className="upliks-block-head">
+          <h2>Последние эффекты</h2>
+          <span>результаты и системная активность</span>
+        </div>
+
+        <div className="upliks-list">
+          {feed.slice(0, 5).map((item) => (
+            <article key={item.id} className="upliks-feed-item">
+              <div className={`upliks-feed-icon tone-${item.accent}`}>
+                <AppIcon name={item.icon} size={18} tone={item.accent === "cyan" ? "cyan" : item.accent} />
+              </div>
+              <div className="upliks-feed-copy">
+                <strong>{item.title}</strong>
+                <span>{item.subtitle}</span>
+              </div>
+              <div className="upliks-feed-side">
+                <strong className={item.impact.startsWith("-") ? "bad" : "good"}>{item.impact}</strong>
+                <span>{item.time}</span>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
 }
 
-function normalizeLobby(value: LobbyResponse): LobbyResponse {
-  return {
-    ...value,
-    assets: value.assets ?? [],
-    events: value.events ?? value.map?.events ?? [],
-    eventFeed: value.eventFeed ?? [],
-    activity: value.activity ?? [],
-    map: value.map ?? { cities: demoCities, events: value.events ?? [] }
+function ProfileScreen({ state, balance, acceptedBet }: { state: LobbyState; balance: number; acceptedBet: AcceptedRoundBet | null }) {
+  return (
+    <section className="upliks-tab-screen">
+      <SectionTitle title="Профиль" subtitle="Статистика игрока и демо-баланс текущей сессии." />
+
+      <div className="upliks-profile-card-simple">
+        <div className="upliks-profile-head">
+          <div className="upliks-avatar-badge large">{(state.user.nickname ?? state.user.firstName ?? "U").slice(0, 1)}</div>
+          <div>
+            <strong>{state.user.nickname ?? state.user.firstName ?? "Игрок"}</strong>
+            <span>{`Уровень ${state.profile.level} • Winrate ${state.profile.winRate}%`}</span>
+          </div>
+        </div>
+
+        <div className="upliks-profile-grid-simple">
+          <div>
+            <span>баланс</span>
+            <strong><Money value={balance} /></strong>
+          </div>
+          <div>
+            <span>текущая серия</span>
+            <strong>{state.profile.currentStreak}</strong>
+          </div>
+          <div>
+            <span>лучшая серия</span>
+            <strong>{state.profile.bestStreak}</strong>
+          </div>
+          <div>
+            <span>приглашено</span>
+            <strong>{state.referral.invitedCount}</strong>
+          </div>
+        </div>
+      </div>
+
+      {acceptedBet ? (
+        <div className="accepted-bet-card">
+          <span>ставка раунда</span>
+          <strong>{acceptedBet.assetName} • {acceptedBet.direction === "up" ? "вверх" : "вниз"} • <Money value={acceptedBet.amount} /></strong>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <section className="upliks-tab-screen">
+      <div className="upliks-hero-card">
+        <div className="upliks-block-head">
+          <h2>Загружаем текущий раунд</h2>
+          <span>Подтягиваем события, активы и баланс игрока</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ErrorScreen({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <section className="upliks-tab-screen">
+      <div className="upliks-hero-card">
+        <div className="upliks-block-head">
+          <h2>Не удалось обновить данные</h2>
+          <span>{message}</span>
+        </div>
+        <button type="button" className="upliks-pill-button" onClick={onRetry}>
+          Обновить
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function navTabForView(view: AppView): AppTab {
+  if (view === "assetDetail" || view === "market") return "assets";
+  if (view === "round") return "lobby";
+  if (view === "eventDetail") return "events";
+  return view;
+}
+
+function titleForView(view: AppView) {
+  const labels: Record<AppView, string> = {
+    lobby: "Лобби",
+    assets: "Активы",
+    map: "Карта",
+    events: "События",
+    profile: "Профиль",
+    assetDetail: "Актив",
+    market: "Биржа",
+    round: "Раунд",
+    eventDetail: "Событие"
   };
+  return labels[view];
 }
 
-function formatRoundClock(round: RoundSummary, now: number) {
-  const fromDate = Math.ceil((new Date(round.endAt).getTime() - now) / 1000);
-  return formatLongDuration(Number.isFinite(fromDate) ? Math.max(0, fromDate) : round.remainingSeconds || 5077);
+function bestRoundAmount(balance: number) {
+  return [...ROUND_AMOUNTS].reverse().find((value) => value <= balance) ?? 100;
 }
 
-function formatEventClock(event: WorldEvent, now: number) {
-  const left = Math.ceil((new Date(event.resolves_at).getTime() - now) / 1000);
-  return formatShortDuration(Number.isFinite(left) ? Math.max(0, left) : event.remaining_seconds);
+function normalizeRoundAmount(amount: number, balance: number) {
+  const safeAmount = Math.max(0, Math.floor(amount));
+  const available = ROUND_AMOUNTS.filter((value) => value <= balance);
+  if (available.length === 0) return null;
+  if ((ROUND_AMOUNTS as readonly number[]).includes(safeAmount) && safeAmount <= balance) return safeAmount;
+  return [...available].reverse().find((value) => value <= safeAmount) ?? available[0] ?? null;
 }
 
-function eventProgress(event: WorldEvent, now: number) {
-  const left = Math.max(0, Math.ceil((new Date(event.resolves_at).getTime() - now) / 1000));
-  return Math.min(100, Math.max(4, ((event.duration_seconds - left) / Math.max(1, event.duration_seconds)) * 100));
-}
-
-function eventProbability(event: WorldEvent, outcome: EventOutcome) {
-  if (outcome === "success") return event.probability_success;
-  if (outcome === "delay") return event.probability_delay;
-  return event.probability_fail;
-}
-
-function eventImpact(event: WorldEvent, outcome: EventOutcome) {
-  if (outcome === "success") return event.success_impact;
-  if (outcome === "delay") return event.delay_impact;
-  return event.fail_impact;
-}
-
-function outcomeLabel(transportType: TransportType, outcome: EventOutcome) {
-  if (transportType === "ship") {
-    if (outcome === "success") return "Танкер прибыл";
-    if (outcome === "delay") return "Задержался";
-    return "Потерял груз / шторм";
+function outcomeRows(event: MapEvent) {
+  if (event.transport === "ship") {
+    return [
+      { id: "success" as const, label: "Танкер прибыл", probability: event.successProbability, impact: event.successImpact },
+      { id: "delay" as const, label: "Задержался", probability: event.delayProbability, impact: event.delayImpact },
+      { id: "fail" as const, label: "Потерял груз / шторм", probability: event.failProbability, impact: event.failImpact }
+    ];
   }
-  if (transportType === "truck") {
-    if (outcome === "success") return "Доставлен";
-    if (outcome === "delay") return "Задержан";
-    return "Не доставлен";
+  if (event.transport === "truck") {
+    return [
+      { id: "success" as const, label: "Доставлен", probability: event.successProbability, impact: event.successImpact },
+      { id: "delay" as const, label: "Задержан", probability: event.delayProbability, impact: event.delayImpact },
+      { id: "fail" as const, label: "Не доставлен", probability: event.failProbability, impact: event.failImpact }
+    ];
   }
-  if (outcome === "success") return "Успешная доставка";
-  if (outcome === "delay") return "Задержка";
-  return "Неудача";
-}
-
-function transportIcon(type: TransportType): "plane" | "ship" | "truck" | "map" {
-  if (type === "ship") return "ship";
-  if (type === "truck") return "truck";
-  if (type === "weather") return "map";
-  return "plane";
-}
-
-function toneToIcon(tone: Accent): "lime" | "purple" | "blue" | "orange" | "red" {
-  if (tone === "green") return "lime";
-  if (tone === "blue") return "blue";
-  return tone;
-}
-
-function formatPercent(value: number) {
-  return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
-}
-
-function formatShortDuration(totalSeconds: number) {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
-
-function formatLongDuration(totalSeconds: number) {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
-
-function avatarInitial(user: User) {
-  return (user.nickname ?? user.firstName ?? "U").slice(0, 1).toUpperCase();
-}
-
-function round2(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
-function createDemoLobby(): LobbyResponse {
-  const now = Date.now();
-  const round: RoundSummary = {
-    id: "demo-round",
-    number: 4821,
-    status: "active",
-    statusLabel: "Идёт",
-    startAt: new Date(now).toISOString(),
-    endAt: new Date(now + 5_077_000).toISOString(),
-    seedHash: "7d0f7fb486e746d1760ef3c428e0f8aa9e840a19e6a98306d07af2a05f0ef482",
-    revealedSeed: null,
-    remainingSeconds: 5_077,
-    prizePool: 125_470,
-    platformFeePercent: 10,
-    participantCount: 1_248,
-    participantAvatars: ["S", "Q", "A", "N", "E"]
-  };
-
-  const assets: WorldAsset[] = [
-    demoAsset("asset-skyforge", "SkyForge", "Логистика", 58_230, 12.4, 1_248, 2_450_000, "green", [100, 102, 104, 106, 112.4]),
-    demoAsset("asset-quant", "QuantCircuit", "Технологии", 32_410, 6.7, 944, 1_820_000, "orange", [100, 101, 100.5, 104, 106.7]),
-    demoAsset("asset-aero", "AeroTexa", "Транспорт", 14_830, -3.8, 713, 1_170_000, "purple", [100, 99.2, 98.8, 97.5, 96.2]),
-    demoAsset("asset-neuro", "NeuroPharm", "Медицина", 11_240, 2.1, 532, 840_000, "blue", [100, 100.4, 101.1, 100.8, 102.1]),
-    demoAsset("asset-eco", "EcoVolt", "Энергетика", 26_750, 8.9, 820, 1_390_000, "green", [100, 102.3, 103.4, 105.7, 108.9])
-  ];
-
-  const events = createDemoEvents(now, round.id, assets);
-
-  return {
-    user: { id: "demo-user", balance: 3_810, nickname: "Upliker", firstName: "Upliker", photoUrl: null },
-    round,
-    assets,
-    events,
-    eventFeed: [
-      { id: "f1", title: "Танкер прибыл в Роттердам", description: "Поставка нефти завершена", assetName: "SkyForge", impactPercent: 4.2, timeAgo: "2 мин назад", tone: "green" },
-      { id: "f2", title: "Авиапоставка в Берлин", description: "Новый электромобиль запущен", assetName: "AeroTexa", impactPercent: 3.1, timeAgo: "5 мин назад", tone: "green" },
-      { id: "f3", title: "Авиапоставка сорвана", description: "Токио → Сидней. Груз повреждён при шторме", assetName: "AeroTexa", impactPercent: -6.7, timeAgo: "12 мин назад", tone: "red" },
-      { id: "f4", title: "Грузовик доставлен в Дубай", description: "Сырьё для производства", assetName: "QuantCircuit", impactPercent: 2.4, timeAgo: "18 мин назад", tone: "green" },
-      { id: "f5", title: "Шторм в Атлантике", description: "Задержки поставок по морским маршрутам", assetName: null, impactPercent: -1.3, timeAgo: "22 мин назад", tone: "red" }
-    ],
-    activity: [
-      { id: "a1", kind: "system", text: "Авиадоставка в Берлин прибудет через 00:18" },
-      { id: "a2", kind: "market", text: "Ставки на AeroTexa резко выросли" },
-      { id: "a3", kind: "market", text: "Танкер с чипами задерживается" },
-      { id: "a4", kind: "market", text: "SkyForge удерживает лидерство" },
-      { id: "a5", kind: "system", text: "Новый маршрут появился на карте" }
-    ],
-    map: { cities: demoCities, events }
-  };
-}
-
-function demoAsset(id: string, name: string, sector: string, price: number, change: number, players: number, pool: number, accent: Accent, values: number[]): WorldAsset {
-  return {
-    id,
-    name,
-    sector,
-    description: `${name} реагирует на транспортные события виртуального мира Upliks.`,
-    iconToken: sector.toLowerCase(),
-    currentPrice: price,
-    change5m: change,
-    players,
-    pool,
-    accent,
-    chartData: values.map((value, tick) => ({ tick, value }))
-  };
-}
-
-function createDemoEvents(now: number, roundId: string, assets: WorldAsset[]): WorldEvent[] {
-  const aero = assets.find((asset) => asset.name === "AeroTexa") ?? assets[0]!;
-  const quant = assets.find((asset) => asset.name === "QuantCircuit") ?? assets[0]!;
-  const sky = assets.find((asset) => asset.name === "SkyForge") ?? assets[0]!;
   return [
-    demoEvent("air-ny-berlin", roundId, "plane_delivery", "Авиадоставка в Берлин", "Доставка электроники", "Нью-Йорк", "Берлин", "plane", aero, 18, "blue", 4.2, 1.5, -6.7, { from: { x: 22, y: 38 }, to: { x: 52, y: 33 }, card: { x: 37, y: 19 }, vehicle: { x: 40, y: 34 } }, now),
-    demoEvent("ship-rotterdam-shanghai", roundId, "ship_delivery", "Танкер с чипами", "Морская поставка чипов", "Роттердам", "Шанхай", "ship", quant, 95, "green", 4.2, -1.3, -7.4, { from: { x: 49, y: 31 }, to: { x: 76, y: 48 }, card: { x: 56, y: 60 }, vehicle: { x: 65, y: 47 } }, now),
-    demoEvent("air-tokyo-dubai", roundId, "plane_delivery", "Авиадоставка", "Задержка", "Токио", "Дубай", "plane", aero, 42, "red", 4.2, 1.5, -6.7, { from: { x: 82, y: 42 }, to: { x: 61, y: 51 }, card: { x: 70, y: 24 }, vehicle: { x: 73, y: 45 } }, now),
-    demoEvent("truck-cape-dubai", roundId, "truck_delivery", "Грузовик с сырьём", "Сырьё для производства", "Кейптаун", "Дубай", "truck", sky, 27, "orange", 2.4, 0.5, -3.2, { from: { x: 53, y: 78 }, to: { x: 61, y: 51 }, card: { x: 30, y: 55 }, vehicle: { x: 58, y: 64 } }, now)
+    { id: "success" as const, label: "Успешная доставка", probability: event.successProbability, impact: event.successImpact },
+    { id: "delay" as const, label: "Задержка", probability: event.delayProbability, impact: event.delayImpact },
+    { id: "fail" as const, label: "Неудача", probability: event.failProbability, impact: event.failImpact }
   ];
 }
 
-function demoEvent(
-  id: string,
-  roundId: string,
-  type: string,
-  title: string,
-  description: string,
-  from: string,
-  to: string,
-  transport: TransportType,
-  asset: WorldAsset,
-  duration: number,
-  tone: Accent,
-  successImpact: number,
-  delayImpact: number,
-  failImpact: number,
-  map: WorldEvent["map"],
-  now: number
-): WorldEvent {
-  return {
-    id,
-    round_id: roundId,
-    type,
-    title,
-    description,
-    route_from: from,
-    route_to: to,
-    transport_type: transport,
-    related_asset_id: asset.id,
-    related_asset_name: asset.name,
-    duration_seconds: duration,
-    remaining_seconds: duration,
-    status: "active",
-    probability_success: transport === "ship" ? 60 : transport === "truck" ? 68 : 65,
-    probability_delay: transport === "ship" ? 28 : transport === "truck" ? 22 : 25,
-    probability_fail: transport === "ship" ? 12 : transport === "truck" ? 10 : 10,
-    success_impact: successImpact,
-    delay_impact: delayImpact,
-    fail_impact: failImpact,
-    outcome: null,
-    impact_applied: false,
-    created_at: new Date(now).toISOString(),
-    resolves_at: new Date(now + duration * 1000).toISOString(),
-    tone,
-    map
-  };
-}
+export default function Home() {
+  const [zoom, setZoom] = useState(1);
+  const [activeView, setActiveView] = useState<AppView>("lobby");
+  const [isMapExpanded, setIsMapExpanded] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [state, setState] = useState<LobbyState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(() => Date.now());
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [eventReturnView, setEventReturnView] = useState<AppView>("events");
+  const [marketDirection, setMarketDirection] = useState<Direction>("up");
+  const [marketAmount, setMarketAmount] = useState(500);
+  const [roundDirection, setRoundDirection] = useState<Direction>("up");
+  const [roundAmount, setRoundAmount] = useState(500);
+  const [marketActions, setMarketActions] = useState<MarketAction[]>([]);
+  const [localMarketSpend, setLocalMarketSpend] = useState(0);
+  const [acceptedBet, setAcceptedBet] = useState<AcceptedRoundBet | null>(null);
+  const roundRef = useRef<string | null>(null);
 
-const demoCities: CityLabel[] = [
-  { name: "Нью-Йорк", x: 22, y: 38 },
-  { name: "Берлин", x: 52, y: 33 },
-  { name: "Токио", x: 82, y: 42 },
-  { name: "Дубай", x: 61, y: 51 },
-  { name: "Сан-Паулу", x: 35, y: 72 },
-  { name: "Сидней", x: 84, y: 76 },
-  { name: "Кейптаун", x: 53, y: 78 }
-];
+  const hydrateLobby = useCallback((payload: LobbyResponse) => {
+    setState(toState(payload));
+    if (roundRef.current && roundRef.current !== payload.round.id) {
+      setNotice("Новый раунд начался. Активы, события и таймеры обновлены.");
+      setAcceptedBet(null);
+      setMarketActions([]);
+      setLocalMarketSpend(0);
+    }
+    roundRef.current = payload.round.id;
+    setError(null);
+    setLoading(false);
+  }, []);
+
+  const ensureSession = useCallback(async () => {
+    const deviceFingerprint = getDeviceFingerprint();
+    const initData = getTelegramInitData();
+
+    if (initData) {
+      const auth = await api<{ sessionToken?: string }>("/auth/telegram", {
+        method: "POST",
+        body: { initData, deviceFingerprint }
+      });
+      saveSessionToken(auth.sessionToken);
+      return;
+    }
+
+    const auth = await api<{ sessionToken?: string }>("/auth/dev", {
+      method: "POST",
+      body: { deviceFingerprint }
+    });
+    saveSessionToken(auth.sessionToken);
+  }, []);
+
+  const loadLobby = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+
+      try {
+        const payload = await api<LobbyResponse>("/lobby");
+        hydrateLobby(payload);
+        return;
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          try {
+            await ensureSession();
+            const retryPayload = await api<LobbyResponse>("/lobby");
+            hydrateLobby(retryPayload);
+            return;
+          } catch (retryError) {
+            const message = retryError instanceof Error ? retryError.message : "Не удалось авторизоваться.";
+            setError(message);
+            setLoading(false);
+            return;
+          }
+        }
+
+        const message = error instanceof Error ? error.message : "Не удалось получить данные.";
+        setError(message);
+        setLoading(false);
+      }
+    },
+    [ensureSession, hydrateLobby]
+  );
+
+  useEffect(() => {
+    setupTelegramTheme();
+    void loadLobby();
+  }, [loadLobby]);
+
+  useEffect(() => {
+    const tick = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(tick);
+  }, []);
+
+  useEffect(() => {
+    const poll = window.setInterval(() => {
+      void loadLobby(true);
+    }, 5000);
+
+    return () => window.clearInterval(poll);
+  }, [loadLobby]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timeout = window.setTimeout(() => setNotice(null), 3200);
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
+
+  useEffect(() => {
+    if (navTabForView(activeView) !== "map" && isMapExpanded) {
+      setIsMapExpanded(false);
+    }
+  }, [activeView, isMapExpanded]);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = isMapExpanded ? "hidden" : previousOverflow || "";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isMapExpanded]);
+
+  const roundSeconds = useMemo(() => {
+    if (!state) return 0;
+    return secondsUntil(state.round.endAt, now);
+  }, [now, state]);
+
+  const mapEvents = useMemo<MapEvent[]>(() => {
+    if (!state) return [];
+    return state.rawEvents.map((event) => {
+      const remainingSeconds = secondsUntil(event.resolves_at, now);
+      const status = remainingSeconds <= 0 ? "resolved" : event.status;
+      return {
+        id: event.id,
+        title: event.title,
+        route: `${event.route_from} → ${event.route_to}`,
+        routeFrom: event.route_from,
+        routeTo: event.route_to,
+        timer: formatTimer(remainingSeconds),
+        description: event.description,
+        transport: eventTransport(event.transport_type),
+        accent: eventAccent(event.tone),
+        from: event.map.from,
+        to: event.map.to,
+        vehicle: event.map.vehicle,
+        card: event.map.card,
+        status,
+        remainingSeconds,
+        durationSeconds: Math.max(1, event.duration_seconds),
+        resolvesAt: event.resolves_at,
+        successProbability: event.probability_success,
+        delayProbability: event.probability_delay,
+        failProbability: event.probability_fail,
+        assetId: event.related_asset_id,
+        assetName: event.related_asset_name,
+        successImpact: event.success_impact,
+        delayImpact: event.delay_impact,
+        failImpact: event.fail_impact,
+        outcome: status === "resolved" ? event.outcome : null
+      };
+    });
+  }, [now, state]);
+
+  const marketBoostByAsset = useMemo(() => {
+    const boost = new Map<string, number>();
+    for (const action of marketActions) {
+      boost.set(action.assetId, (boost.get(action.assetId) ?? 0) + Math.min(24, Math.floor(action.amount / 120)));
+    }
+    return boost;
+  }, [marketActions]);
+
+  const visibleAssets = useMemo(() => {
+    if (!state) return [];
+    return state.assets.map((asset) => {
+      const localAmount = marketActions.filter((item) => item.assetId === asset.id).reduce((sum, item) => sum + item.amount, 0);
+      const playerBoost = Math.floor(localAmount / 100);
+      return {
+        ...asset,
+        players: asset.players + playerBoost,
+        pool: asset.pool + localAmount
+      };
+    });
+  }, [marketActions, state]);
+
+  const visibleBalance = Math.max(0, (state?.user.balance ?? 0) - localMarketSpend);
+  const selectedAsset = visibleAssets.find((asset) => asset.id === selectedAssetId) ?? visibleAssets[0] ?? null;
+  const selectedEvent = mapEvents.find((event) => event.id === selectedEventId) ?? mapEvents[0] ?? null;
+  const selectedEventAsset = selectedEvent ? visibleAssets.find((asset) => asset.id === selectedEvent.assetId) ?? null : null;
+  const activeNav = navTabForView(activeView);
+  const headerTitle = titleForView(activeView);
+
+  const interestForAsset = useCallback(
+    (asset: RoundAsset) => marketInterest(asset, marketBoostByAsset.get(asset.id) ?? 0),
+    [marketBoostByAsset]
+  );
+
+  const openAsset = useCallback((asset: RoundAsset) => {
+    setSelectedAssetId(asset.id);
+    setActiveView("assetDetail");
+  }, []);
+
+  const openEvent = useCallback(
+    (event: MapEvent) => {
+      setSelectedEventId(event.id);
+      setEventReturnView(activeView === "eventDetail" ? "events" : activeView);
+      setActiveView("eventDetail");
+    },
+    [activeView]
+  );
+
+  const handleTopUp = useCallback(async () => {
+    try {
+      const result = await api<{ amount: number; user: User }>("/me/demo-top-up", { method: "POST" });
+      setState((current) => (current ? { ...current, user: { ...current.user, balance: result.user.balance } } : current));
+      setNotice(`На счёт добавлено ${formatMoney(result.amount)} ₽ (демо).`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Не удалось пополнить демо-баланс.";
+      setNotice(message);
+    }
+  }, []);
+
+  const handleMarketInvest = useCallback(() => {
+    if (!selectedAsset) return;
+    const amount = Math.max(0, Math.floor(marketAmount));
+    if (amount <= 0) {
+      setNotice("Укажи сумму влияния.");
+      return;
+    }
+    if (amount > visibleBalance) {
+      setNotice("Недостаточно демо-баланса.");
+      return;
+    }
+
+    setMarketActions((items) => [...items, { id: `${selectedAsset.id}:${Date.now()}`, assetId: selectedAsset.id, direction: marketDirection, amount }]);
+    setLocalMarketSpend((current) => current + amount);
+    setNotice(`Вы ${marketDirection === "up" ? "усилили рост" : "усилили давление"} ${selectedAsset.name}.`);
+  }, [marketAmount, marketDirection, selectedAsset, visibleBalance]);
+
+  const handleRoundBet = useCallback(async () => {
+    if (!state || !selectedAsset) return;
+    const normalizedAmount = normalizeRoundAmount(roundAmount, visibleBalance);
+    if (!normalizedAmount) {
+      setNotice("Недостаточно демо-баланса для ставки.");
+      return;
+    }
+    if (normalizedAmount !== roundAmount) {
+      setRoundAmount(normalizedAmount);
+      setNotice(`Для раунда выбрана ближайшая доступная сумма ${formatMoney(normalizedAmount)} ₽.`);
+      return;
+    }
+
+    try {
+      await api("/bets", {
+        method: "POST",
+        body: {
+          roundId: state.round.id,
+          assetId: selectedAsset.id,
+          horizon: roundDirection === "up" ? "long" : "short",
+          amount: normalizedAmount
+        }
+      });
+      setAcceptedBet({
+        assetId: selectedAsset.id,
+        assetName: selectedAsset.name,
+        direction: roundDirection,
+        amount: normalizedAmount,
+        placedAt: Date.now()
+      });
+      setState((current) =>
+        current
+          ? {
+              ...current,
+              user: { ...current.user, balance: Math.max(0, current.user.balance - normalizedAmount) }
+            }
+          : current
+      );
+      setNotice("Ставка принята сервером. Выплата будет рассчитана после раунда.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Не удалось создать ставку.";
+      setNotice(message);
+    }
+  }, [roundAmount, roundDirection, selectedAsset, state, visibleBalance]);
+
+  return (
+    <main className={`upliks-map-app ${isMapExpanded ? "map-expanded" : ""}`}>
+      <TelegramHeader
+        title="Upliks"
+        subtitle="мини-приложение"
+        onClose={() => {
+          if (typeof window !== "undefined" && window.Telegram?.WebApp?.close) {
+            window.Telegram.WebApp.close();
+            return;
+          }
+          setNotice("Закрытие доступно внутри Telegram.");
+        }}
+        onMore={() => setNotice(`Открыто меню раздела «${headerTitle}».`)}
+      />
+
+      {loading && !state ? <LoadingScreen /> : null}
+      {!loading && error && !state ? <ErrorScreen message={error} onRetry={() => void loadLobby()} /> : null}
+
+      {state ? (
+        <>
+          {activeView === "lobby" ? (
+            <LobbyScreen
+              state={state}
+              assets={visibleAssets}
+              events={mapEvents}
+              roundSeconds={roundSeconds}
+              balance={visibleBalance}
+              interestForAsset={interestForAsset}
+              onTopUp={() => void handleTopUp()}
+              onPlayRound={() => {
+                setSelectedAssetId(selectedAsset?.id ?? visibleAssets[0]?.id ?? null);
+                setActiveView("round");
+              }}
+              onOpenAsset={openAsset}
+              onOpenEvent={openEvent}
+              onOpenEvents={() => setActiveView("events")}
+            />
+          ) : null}
+
+          {activeView === "assets" ? <AssetsScreen assets={visibleAssets} interestForAsset={interestForAsset} onOpenAsset={openAsset} /> : null}
+
+          {activeView === "assetDetail" && selectedAsset ? (
+            <AssetDetailScreen
+              asset={selectedAsset}
+              events={mapEvents.filter((event) => event.assetId === selectedAsset.id)}
+              interest={interestForAsset(selectedAsset)}
+              onBack={() => setActiveView("assets")}
+              onMarket={() => setActiveView("market")}
+              onRound={() => setActiveView("round")}
+              onOpenEvent={openEvent}
+            />
+          ) : null}
+
+          {activeView === "market" && selectedAsset ? (
+            <MarketScreen
+              asset={selectedAsset}
+              balance={visibleBalance}
+              interest={interestForAsset(selectedAsset)}
+              direction={marketDirection}
+              amount={marketAmount}
+              onBack={() => setActiveView("assetDetail")}
+              onDirection={setMarketDirection}
+              onAmount={setMarketAmount}
+              onInvest={handleMarketInvest}
+            />
+          ) : null}
+
+          {activeView === "round" ? (
+            <RoundPlayScreen
+              assets={visibleAssets}
+              events={mapEvents}
+              round={state.round}
+              roundSeconds={roundSeconds}
+              balance={visibleBalance}
+              selectedAssetId={selectedAsset?.id ?? null}
+              direction={roundDirection}
+              amount={roundAmount}
+              acceptedBet={acceptedBet}
+              interestForAsset={interestForAsset}
+              onSelectAsset={setSelectedAssetId}
+              onDirection={setRoundDirection}
+              onAmount={setRoundAmount}
+              onConfirm={() => void handleRoundBet()}
+              onOpenMap={() => setActiveView("map")}
+              onOpenAsset={openAsset}
+            />
+          ) : null}
+
+          {activeView === "map" ? (
+            <MapScreen
+              zoom={zoom}
+              onZoomIn={() => setZoom((current) => Math.min(1.18, Math.round((current + 0.05) * 100) / 100))}
+              onZoomOut={() => setZoom((current) => Math.max(0.92, Math.round((current - 0.05) * 100) / 100))}
+              expanded={isMapExpanded}
+              onToggleExpanded={() => setIsMapExpanded((current) => !current)}
+              events={mapEvents}
+              onEventSelect={openEvent}
+            />
+          ) : null}
+
+          {activeView === "eventDetail" && selectedEvent ? (
+            <EventDetailScreen
+              event={selectedEvent}
+              asset={selectedEventAsset}
+              onBack={() => setActiveView(eventReturnView)}
+              onAsset={() => {
+                if (selectedEventAsset) openAsset(selectedEventAsset);
+              }}
+            />
+          ) : null}
+
+          {activeView === "events" ? <EventsScreen events={mapEvents} feed={state.feed} onOpenEvent={openEvent} /> : null}
+          {activeView === "profile" ? <ProfileScreen state={state} balance={visibleBalance} acceptedBet={acceptedBet} /> : null}
+        </>
+      ) : null}
+
+      <BottomNav
+        active={activeNav}
+        onChange={(tab) => {
+          setActiveView(tab);
+          setIsMapExpanded(false);
+        }}
+      />
+
+      {notice ? (
+        <div className="upliks-inline-toast" role="status">
+          {notice}
+        </div>
+      ) : null}
+    </main>
+  );
+}

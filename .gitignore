@@ -8,3 +8,5 @@ coverage
 tmp
 postgres-data
 redis-data
+
+*.tar.gz

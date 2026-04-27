@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { actionLimiter, profileLimiter } from "../middleware/rate-limits.js";
 import { requireAuth } from "../middleware/auth.js";
 import { validateBody } from "../middleware/validate.js";
+import { applyBalanceChange } from "../services/economy.service.js";
 import { claimMissionReward, getMissionBoard } from "../services/mission.service.js";
 import { claimDailyLoginBonus, claimRescueRefill, getProfile, publicUser } from "../services/user.service.js";
 
@@ -27,6 +28,19 @@ meRouter.post("/claim-daily-login", requireAuth, actionLimiter, async (req, res)
 meRouter.post("/claim-rescue", requireAuth, actionLimiter, async (req, res) => {
   const result = await prisma.$transaction((tx) => claimRescueRefill(tx, req.user!.id));
   res.json(result);
+});
+
+meRouter.post("/demo-top-up", requireAuth, actionLimiter, async (req, res) => {
+  const user = await prisma.$transaction((tx) =>
+    applyBalanceChange(tx, {
+      userId: req.user!.id,
+      delta: 1000,
+      type: "manual_adjustment",
+      referenceType: "demo_top_up",
+      referenceId: req.user!.id
+    })
+  );
+  res.json({ amount: 1000, user: publicUser(user) });
 });
 
 meRouter.post("/claim-mission", requireAuth, actionLimiter, validateBody(claimMissionSchema), async (req, res) => {
