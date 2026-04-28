@@ -2,14 +2,17 @@ FROM node:22-alpine AS deps
 WORKDIR /app
 RUN apk add --no-cache openssl libc6-compat
 RUN corepack enable
-COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/backend/package.json apps/backend/package.json
 COPY packages/shared/package.json packages/shared/package.json
 RUN pnpm install --frozen-lockfile=false
 
 FROM deps AS build
-COPY packages packages
-COPY apps/backend apps/backend
+COPY packages/shared/src packages/shared/src
+COPY packages/shared/tsconfig.json packages/shared/tsconfig.json
+COPY apps/backend/src apps/backend/src
+COPY apps/backend/prisma apps/backend/prisma
+COPY apps/backend/tsconfig.json apps/backend/tsconfig.json
 RUN pnpm --filter @volatility/shared build
 RUN pnpm --filter @volatility/backend db:generate
 RUN pnpm --filter @volatility/backend build

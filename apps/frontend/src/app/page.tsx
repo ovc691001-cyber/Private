@@ -6,6 +6,17 @@ import { EventMap } from "@/components/EventMap";
 import { Legend } from "@/components/Legend";
 import { TelegramHeader } from "@/components/TelegramHeader";
 import { AppIcon } from "@/components/Icon";
+import {
+  assetNameToMapAsset,
+  cityIdFromName,
+  eventStatusFromState,
+  eventTypeFromTransport,
+  mapAccentFromEvent,
+  pointForCityId,
+  type EventStatus,
+  type EventType,
+  type MapAsset
+} from "@/components/mapGeo";
 import { api, ApiError, saveSessionToken } from "@/lib/api";
 import { getDeviceFingerprint, getTelegramInitData, setupTelegramTheme } from "@/lib/telegram";
 
@@ -177,13 +188,20 @@ type BackendMapEvent = {
 export type MapEvent = {
   id: string;
   title: string;
+  type: EventType;
   route: string;
   routeFrom: string;
   routeTo: string;
+  fromCityId: string | null;
+  toCityId: string | null;
   timer: string;
   description: string;
   transport: TransportType;
   accent: Accent;
+  eventStatus: EventStatus;
+  etaSeconds: number;
+  asset: MapAsset;
+  impact: number;
   from: MapPoint;
   to: MapPoint;
   vehicle: MapPoint;
@@ -1439,18 +1457,47 @@ export default function Home() {
     return state.rawEvents.map((event) => {
       const remainingSeconds = secondsUntil(event.resolves_at, now);
       const status = remainingSeconds <= 0 ? "resolved" : event.status;
+      const transport = eventTransport(event.transport_type);
+      const fromCityId = cityIdFromName(event.route_from);
+      const toCityId = cityIdFromName(event.route_to);
+      const from = pointForCityId(fromCityId) ?? event.map.from;
+      const to = pointForCityId(toCityId) ?? event.map.to;
+      const baseAccent = eventAccent(event.tone);
+      const impact =
+        status === "resolved"
+          ? event.outcome === "fail"
+            ? event.fail_impact
+            : event.outcome === "delay"
+              ? event.delay_impact
+              : event.success_impact
+          : event.tone === "red"
+            ? event.fail_impact
+            : event.tone === "orange"
+              ? event.delay_impact
+              : event.tone === "green"
+                ? event.success_impact
+                : 0;
+      const eventStatus = eventStatusFromState(status, status === "resolved" ? event.outcome : null, baseAccent);
+
       return {
         id: event.id,
         title: event.title,
+        type: eventTypeFromTransport(transport),
         route: `${event.route_from} → ${event.route_to}`,
         routeFrom: event.route_from,
         routeTo: event.route_to,
+        fromCityId,
+        toCityId,
         timer: formatTimer(remainingSeconds),
         description: event.description,
-        transport: eventTransport(event.transport_type),
-        accent: eventAccent(event.tone),
-        from: event.map.from,
-        to: event.map.to,
+        transport,
+        accent: mapAccentFromEvent(eventStatus, impact, baseAccent),
+        eventStatus,
+        etaSeconds: remainingSeconds,
+        asset: assetNameToMapAsset(event.related_asset_name),
+        impact,
+        from,
+        to,
         vehicle: event.map.vehicle,
         card: event.map.card,
         status,

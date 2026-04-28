@@ -7,6 +7,8 @@ const filePath = fileURLToPath(new URL("./page.tsx", import.meta.url));
 const source = fs.readFileSync(path.resolve(filePath), "utf8").toLowerCase();
 const eventMapPath = fileURLToPath(new URL("../components/EventMap.tsx", import.meta.url));
 const eventMapSource = fs.readFileSync(path.resolve(eventMapPath), "utf8").toLowerCase();
+const mapGeoPath = fileURLToPath(new URL("../components/mapGeo.ts", import.meta.url));
+const mapGeoSource = fs.readFileSync(path.resolve(mapGeoPath), "utf8").toLowerCase();
 
 describe("event map screen copy", () => {
   it("uses the new upliks event map framing", () => {
@@ -41,5 +43,17 @@ describe("event map screen copy", () => {
     }
     expect(eventMapSource).toContain("data-model");
     expect(eventMapSource).toContain("routeangle");
+  });
+
+  it("projects event routes from real city coordinates", () => {
+    expect(mapGeoSource).toContain("export const map_cities");
+    expect(mapGeoSource).toContain("lat: 40.7128");
+    expect(mapGeoSource).toContain("lon: -74.006");
+    expect(mapGeoSource).toContain("((lon + 180) / 360) * 100");
+    expect(mapGeoSource).toContain("((90 - lat) / 180) * 100");
+    expect(source).toContain("fromcityid");
+    expect(source).toContain("tocityid");
+    expect(source).toContain("pointforcityid");
+    expect(eventMapSource).not.toContain("const cities");
   });
 });
